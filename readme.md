@@ -18,38 +18,39 @@ The use of the commbadge needs to be as easy as possible just by touching the co
 Request message codes:
 
 Code | Discription                              | Transfer                    | Remark
----- | ---------------------------------------- | -----------------------------
-0x01 | Ping the server                          | client to server/broadcast
-0x02 | Pong from server                         | server to client
-0x03 | Reguest client details (new in network)  | server to client
-0x04 | Send orginal network IP and username     | client to server
-0x05 | New device no info available             | client to server
----- | ---------------------------------------- | -----------------------------
+---- | ---------------------------------------- | --------------------------- | ---------
+0x01 | Ping the server                          | client to server/broadcast |
+0x02 | Pong from server                         | server to client |
+0x03 | Reguest client details (new in network)  | server to client |
+0x03 | Reguest client details (new in network)  | server to client |
+0x04 | Send orginal network IP and username     | client to server |
+0x05 | New device no info available             | client to server |
+---- | ---------------------------------------- | --------------------------- |
 0x08 | Reject new client                        | server to client            | not used
-0x09 | Accept new client                        | server to client
----- | ---------------------------------------- | -----------------------------
-0x0d | Update username                          | server to client
-0x0e | Update owner IP (used in other network)  | server to client
-0x0f | Ack update owner IP                      | client to server
----- | ---------------------------------------- | -----------------------------
-0x30 | Start call request                       | client to server
-0x31 | Deliver other mac address                | server to client
-0x32 | Other client not available               | server to client
----- | ---------------------------------------- | -----------------------------
-0x37 | Request call                             | client to client
-0x38 | Receive call                             | client to client
-0x39 | Close call/call rejected                 | client to client
----- | ---------------------------------------- | -----------------------------
-0x3f | Voice package send / received.           | server/client to client/server
----- | ---------------------------------------- | -----------------------------
-0x40 | Client peered on extern network          | network to server
-0x4f | Client left from extern network          | network to server
----- | ---------------------------------------- | -----------------------------
-0xe0 | Start update firmware                    | server to broadcast
-0xe1 | Upload update firmware                   | server to broadcast
-0xe2 | Ack update now                           | client to erver
----- | ---------------------------------------- | -----------------------------
-0xff | Alarm help needed.                       | client to broadcast
+0x09 | Accept new client                        | server to client |
+---- | ---------------------------------------- | --------------------------- |
+0x0d | Update username                          | server to client |
+0x0e | Update owner IP (used in other network)  | server to client |
+0x0f | Ack update owner IP                      | client to server |
+---- | ---------------------------------------- | --------------------------- |
+0x30 | Start call request                       | client to server |
+0x31 | Deliver other mac address                | server to client |
+0x32 | Other client not available               | server to client |
+---- | ---------------------------------------- | --------------------------- |
+0x37 | Request call                             | client to client |
+0x38 | Receive call                             | client to client |
+0x39 | Close call/call rejected                 | client to client |
+---- | ---------------------------------------- | --------------------------- |
+0x3f | Voice package send / received.           | server/client to client/server |
+---- | ---------------------------------------- | ---------------------------- |
+0x40 | Client peered on extern network          | network to server |
+0x4f | Client left from extern network          | network to server |
+---- | ---------------------------------------- | ---------------------------- |
+0xe0 | Start update firmware                    | server to broadcast |
+0xe1 | Upload update firmware                   | server to broadcast |
+0xe2 | Ack update now                           | client to erver |
+---- | ---------------------------------------- | ---------------------------  |
+0xff | Alarm help needed.                       | client to broadcast |
 
 
 
