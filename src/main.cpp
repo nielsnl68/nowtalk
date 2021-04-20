@@ -57,7 +57,7 @@ Request message codes:
 void OnDataSent(const uint8_t *mac, esp_now_send_status_t sendStatus) {
   if (sendStatus != ESP_NOW_SEND_SUCCESS ){
     if (isMaster) {
-      Handle_Node(mac, "Gone","");
+      Handle_Node(mac, "Gone", "");
     } else {
       message( ("* search new master"));
       bool isNewMaster = (masterAddress[0] == 0);           
@@ -90,7 +90,8 @@ void handlePackage(const uint8_t mac[6], const uint8_t * buf, size_t count) {
   myData.info[0] = 0;
   memcpy(&myData, line, count);
   char msg[256];
-  int n = snprintf(msg, 255, "< %02x%02x%02x%02x%02x%02x %02x %s", mac[0], mac[1], mac[2], 
+  
+  snprintf(msg, 255, "< %02x%02x%02x%02x%02x%02x %02x %s", mac[0], mac[1], mac[2], 
                                                                   mac[3], mac[4], mac[5],
                                                                   myData.action, myData.info);
   message(msg);
@@ -98,7 +99,7 @@ void handlePackage(const uint8_t mac[6], const uint8_t * buf, size_t count) {
   if (myData.action == 0x01) {
      bool isNewMaster = (masterAddress[0] == 0);
      if (isNewMaster) {
-        int n = snprintf(msg, 255, "* New Master at %02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], 
+        snprintf(msg, 255, "* New Master at %02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], 
                                                                   mac[3], mac[4], mac[5]);
         message(msg);
      } else {
@@ -146,7 +147,7 @@ void handlePackage(const uint8_t mac[6], const uint8_t * buf, size_t count) {
     if (!isMaster) return;
     Handle_Node(mac,"Ack","");
   } else {
-     int n = snprintf( msg, 255, "E Unknown message code receiced from %02x%02x%02x%02x%02x%02x [%02x] %s", mac[0], mac[1], mac[2], 
+     snprintf( msg, 255, "E Unknown message code receiced from %02x%02x%02x%02x%02x%02x [%02x] %s", mac[0], mac[1], mac[2], 
                                                                   mac[3], mac[4], mac[5], myData.action, myData.info);
      message(msg);
      return;
@@ -279,40 +280,14 @@ void handleServerMsg(const uint8_t * mac_addr, const uint8_t *incomingData, int 
 
 String GetExternalIP()
 {
-  String ip ;
-/*  
-  WiFiClient client;
-  if (!client.connect("api.ipify.org", 80)) {
-    Serial.println("Failed to connect with 'api.ipify.org' !");
-  }
-  else {
-    int timeout = millis() + 5000;
-    client.println("GET /?format=text HTTP/1.1\r\nHost: api.ipify.org\r\n\r\n");
- 
-    while (client.available() == 0) {
-      if (timeout - millis() < 0) {
-        Serial.println(">>> Client Timeout !");
-        client.stop();
-        return "";
-      }
-    }
-    int size;
-     ip[0] = 0;
-    while ((size = client.available()) > 0) {
-      char * msg = (char *)malloc(size);
-      size = client.readBytes(msg, size);
-&msg[size]= "\0";
-      strcat(ip ,   msg);
-      free(msg);
-    }
-       Serial.println(ip);
-  }
-  */
+  String ip ="";
 
   HTTPClient http;
   http.begin("http://api.ipify.org/?format=text");
   int statusCode = http.GET();
-  ip = http.getString();
+  if (statusCode == 200) { 
+    ip = http.getString();
+  }
   http.end();
   return ip ;
 }

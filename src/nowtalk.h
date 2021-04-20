@@ -1,7 +1,8 @@
-#include "variabes.h"
-#ifndef NOWTALK_COMMON;
-#define NOWTALK_COMMON;
 
+#ifndef NOWTALK_COMMON
+#define NOWTALK_COMMON
+
+#include "variabes.h"
 
 void message(const char * message){
   if (isMaster) {
@@ -112,8 +113,7 @@ esp_err_t  send_message(const uint8_t * mac, byte action, String data) {
   struct_message myData;
   myData.action  = action;
 
-  int n = snprintf(myData.info, sizeof(myData.info), " %s",
-  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], myData.action, myData.info);
+  int n = snprintf(myData.info, sizeof(myData.info), " %s", myData.info);
   myData.info[n] = 0;
 
   char   msg[256];

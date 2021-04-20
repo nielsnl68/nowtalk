@@ -1,5 +1,5 @@
-#ifndef NOWTALK_VARBS;
-#define NOWTALK_VARBS;
+#ifndef NOWTALK_VARBS
+#define NOWTALK_VARBS
 typedef struct {
     uint8_t mac[6];
     uint8_t buf[256];

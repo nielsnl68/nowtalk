@@ -57,7 +57,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             <div class="card-header">
               <i class="fas fa-tint"></i> Node Overview
             </div>
-            <div class="card-body ">
+            <div class="card-body p-0 ">
            
               <div class="scrolltable">
               <table class="table table-sm table-hover table-striped">
@@ -102,7 +102,7 @@ const char index_html[] PROGMEM = R"rawliteral(
                       <div class="card-header">
               <i class="fas fa-comments"></i> Messages
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
               <div class="scrolltable" >
                <table class="table table-sm table-borderless">
                  <tbody class="messages">
