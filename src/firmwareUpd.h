@@ -1,7 +1,16 @@
-#include "nowtalk.h"
-#include "variabes.h"
+#ifndef NOWTALK_UPD
+#define NOWTALK_UPD
 
-void broadcast_update(fs::FS &fs, const uint8_t * mac ) {
+#include <Arduino.h>
+
+#include <Update.h>
+#include "nowtalk.h"
+#include "variables.h"
+
+bool performUpdate(Stream &updateSource, size_t updateSize);
+
+void broadcast_update(fs::FS &fs, const uint8_t *mac)
+{
    File updateBin = fs.open("/update.bin");
    if (updateBin) {
       
@@ -24,9 +33,6 @@ void broadcast_update(fs::FS &fs, const uint8_t * mac ) {
       }
 
       updateBin.close();
-      EEPROM.write(EEPROMaddr+2, 255);
-      EEPROM.commit();  
-        
    }
    else {
       Serial.println("* Could not load update.bin");
@@ -63,7 +69,7 @@ bool performUpdate(Stream &updateSource, size_t updateSize) {
    return result;
 }
 
-void load_update(int size) {
+void load_update(int size, boolean isClient) {
       fs::FS &fs = SPIFFS;
     if (!fs.exists("/update.bin") || fs.remove("/update.bin")) {
       File file = fs.open("/update.bin", FILE_WRITE);
@@ -83,11 +89,13 @@ void load_update(int size) {
       size_t updateSize = file.size();
 
       if (updateSize > 0) {
-         Serial.println("* Try to start update");
-         if (performUpdate(file, updateSize)) {
-            EEPROM.write(EEPROMaddr+2, 0);
-            EEPROM.commit();
+         if (isClient) {
+         Serial.println("* Try to start update clients");
+         broadcast(0xE0, String(updateSize));
+         } else {
+            performUpdate(file, updateSize);
          }
+
       } else {
          Serial.println("! ERROR file is empty");
       }
@@ -97,3 +105,4 @@ void load_update(int size) {
     }
 
 }
+#endif

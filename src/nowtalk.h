@@ -2,12 +2,16 @@
 #ifndef NOWTALK_COMMON
 #define NOWTALK_COMMON
 
-#include "variabes.h"
+#include "variables.h"
+#include <HTTPClient.h>
 
 void message(const char * message){
-  if (isMaster) {
-//     events.send(message, null, millis());
-  } else {
+  if (config.isMaster)
+  {
+    //     events.send(message, null, millis());
+  }
+  else
+  {
     Serial.println(message);
   }
 }
@@ -19,7 +23,7 @@ void add_peer(const uint8_t * mac) {
   if (!esp_now_is_peer_exist(mac)) {    
     esp_now_peer_info_t peerInfo = {};
     memcpy(&peerInfo.peer_addr, mac, 6);
-    peerInfo.channel = channel;
+    peerInfo.channel = config.channel;
     // Add peer        
     if (esp_now_add_peer(&peerInfo) != ESP_OK){
       message("* Failed to add peer");
@@ -96,33 +100,11 @@ void ShowByteArray(String test) {
   Serial.println();
 }
 
-bool add_userinfo(byte status,const uint8_t *mac_addr, const char* externIP, const char* username) {
-  return false;
-}
-
-void createUserList() {
-     
-}
-
-
-void  Handle_Node(const uint8_t * mac, char * status, const char * externIP){
-
-}
-
 esp_err_t  send_message(const uint8_t * mac, byte action, String data) {
-  struct_message myData;
-  myData.action  = action;
+  char  myData[200];
+  byte n = sprintf(myData, "%s%s", (char) action, data);
+  myData[n] = 0;
 
-  int n = snprintf(myData.info, sizeof(myData.info), " %s", myData.info);
-  myData.info[n] = 0;
-
-  char   msg[256];
-
-   n = snprintf(msg, 255, "> %02x%02x%02x%02x%02x%02x %02x %s", mac[0], mac[1], mac[2], 
-                                                                  mac[3], mac[4], mac[5],
-                                                                  myData.action, myData.info);
-  message(msg);
-  
   esp_err_t  result =  esp_now_send(mac, (const uint8_t *) &myData, n+2);
   return result;
 }
@@ -144,6 +126,26 @@ String IpAddress2String(const IPAddress& ipAddress)
   String(ipAddress[3])  ; 
 }
 
+ void debug( char * code, const uint8_t *mac, uint8_t action, char *info){
+    char msg[256];
+    snprintf(msg, 255, "%s %02x%02x%02x%02x%02x%02x 0x%02x %s", 
+             code, mac[0], mac[1], mac[2],   mac[3], mac[4], mac[5],  action, info);
+    message(msg);
+}
 
+String GetExternalIP()
+{
+  String ip = "";
+
+  HTTPClient http;
+  http.begin("http://api.ipify.org/?format=text");
+  int statusCode = http.GET();
+  if (statusCode == 200)
+  {
+    ip = http.getString();
+  }
+  http.end();
+  return ip;
+}
 
 #endif
