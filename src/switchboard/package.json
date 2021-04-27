@@ -1,0 +1,19 @@
+{
+  "name": "nowtalkpisrv",
+  "version": "0.1.0",
+  "description": "backend for nowTalk-commbadge network switchboard",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chalk": "^4.1.1",
+    "commander": "^7.2.0",
+    "json-rpc2": "^2.0.0",
+    "serialport": "^9.0.7",
+    "sqlite3": "^5.0.2",
+    "terminal-kit": "^2.0.7"
+  }
+}
