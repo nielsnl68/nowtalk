@@ -92,7 +92,7 @@ function startProgramm(commport) {
 
     db.serialize(function () {
         db.run("CREATE TABLE IF NOT EXISTS users ( mac TEXT NOT NULL UNIQUE,   status INTEGER,   ip TEXT,   name TEXT NOT NULL, PRIMARY KEY(mac)");
-        
+
         db.each("SELECT * FROM users", function (err, row) {
             users[row.mac] = row;
         });
@@ -190,38 +190,38 @@ emitter.on(0x0f, msg => {
 
 
 function unpeer_mac(mac) {
-        var buf = Buffer.alloc(7);
-        buf.writeUInt8(0x03);
-        buf.writeUIntBE(msg.mac, 6, 1);
-        port.write(buf);
-    }
+    var buf = Buffer.alloc(7);
+    buf.writeUInt8(0x03);
+    buf.writeUIntBE(msg.mac, 6, 1);
+    port.write(buf);
+}
 
 function send_message(mac, code, mag) {
 
-        if (msg === undefined) msg = "";
+    if (msg === undefined) msg = "";
 
-        var buf = Buffer.alloc(9 + msg.length);
-        buf.writeUInt8(0x02);
-        buf.writeUIntBE(msg.mac, 6, 1);
-        buf.writeUInt8(code, 7);
-        buf.write(msg, 9);
-        port.write(buf);
-    }
+    var buf = Buffer.alloc(9 + msg.length);
+    buf.writeUInt8(0x02);
+    buf.writeUIntBE(msg.mac, 6, 1);
+    buf.writeUInt8(code, 7);
+    buf.write(msg, 9);
+    port.write(buf);
+}
 
 
 function update_status(mac, status) {
-        var isNew = !(user = users[mac]);
-        if (isNew) {
-            user = { "mac": mac, "status": 0, "ip": "", "name": "", "timestamp": 0 };
-        }
-        if (status > 0xf) {
-            user.status = (user.status & 0x0f) + (status & 0xf0);
-            update_db(user);
-        } else {
-            user.status = (user.status & 0xf0) + (status & 0x0f);
-        }
-        users[mac] = user;
+    var isNew = !(user = users[mac]);
+    if (isNew) {
+        user = { "mac": mac, "status": 0, "ip": "", "name": "", "timestamp": 0 };
     }
+    if (status > 0xf) {
+        user.status = (user.status & 0x0f) + (status & 0xf0);
+        update_db(user);
+    } else {
+        user.status = (user.status & 0xf0) + (status & 0x0f);
+    }
+    users[mac] = user;
+}
 
 function update_db(user) {
     status = user.status & 0xf0;
@@ -235,7 +235,7 @@ function update_db(user) {
                 "status = excluded.status," + "ip = excluded.ip," +
                 "name = excluded.name", [user.mac, status, user.ip, user.name]);
         }
-    }
+    });
 }
 
 
