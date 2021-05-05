@@ -10,12 +10,7 @@ struct config_t
 {
   unsigned long lastTime = 0;
   unsigned long timerDelay = 30000; // send readings timer
-  char ssid[32] = "";
-  char password[64] = "";
   unsigned long eventInterval = 5000;
-
-  boolean allowGuests = true;
-  boolean isMaster = false;
   char masterIP[32] = "<None>";
   char userName[64] = "<None>";
   uint8_t masterAddress[6] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -64,7 +59,7 @@ nowtalklist_t users[_maxUserCount];
 
 static volatile int read_idx = 0;
 static volatile int write_idx = 0;
-static nowtalk_t circbuf[QUEUE_SIZE];
+static nowtalk_t circbuf[QUEUE_SIZE] ={};
 
 String inputString = "";     // a String to hold incoming data
 bool stringComplete = false; // whether the string is complete
@@ -145,18 +140,12 @@ void loadConfiguration(bool clear = false)
   file.close();
 
   // Copy values from the JsonDocument to the Config
-  config.allowGuests = doc["userName"] | true;
-  config.isMaster = doc["userName"] | false;
-
-  config.channel = doc["userName"] | 0;
+  config.channel = doc["channel"] | 0;
   config.port = doc["port"] | 2731;
   strlcpy(config.hostname, doc["hostname"] | "example.com", sizeof(config.hostname)); // <- destination's capacity
 
   config.timerDelay = doc["timerDelay"] | 30000;      // send readings timer
   config.eventInterval = doc["eventInterval"] | 5000; //EVENT_INTERVAL_MS
-
-  strlcpy(config.ssid, doc["ssid"] | "", sizeof(config.ssid));             // <- destination's capacity
-  strlcpy(config.password, doc["password"] | "", sizeof(config.password)); // <- destination's capacity
 
   strlcpy(config.masterIP, doc["masterIP"] | "", sizeof(config.masterIP)); // <- destination's capacity
   strlcpy(config.userName, doc["userName"] | "", sizeof(config.userName)); // <- destination's capacity
@@ -181,18 +170,12 @@ void saveConfiguration()
   StaticJsonDocument<524> doc;
 
   // Copy values from the JsonDocument to the Config
-  doc["allowGuests"] = config.allowGuests;
-  doc["isMaster"] = config.isMaster;
-
-  doc["userName"] = config.channel;
+  doc["channel"] = config.channel;
   doc["port"] = config.port;
   doc["hostname"] = config.hostname;
 
   doc["timerDelay"] = config.timerDelay;       // send readings timer
   doc["eventInterval"] = config.eventInterval; //EVENT_INTERVAL_MS
-
-  doc["ssid"] = config.ssid;
-  doc["password"] = config.password;
 
   doc["masterIP"] = config.masterIP;
   doc["userName"] = config.userName;

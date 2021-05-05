@@ -6,15 +6,9 @@
 #include <HTTPClient.h>
 
 void message(const char * message){
-  if (config.isMaster)
-  {
-    //     events.send(message, null, millis());
-  }
-  else
-  {
     Serial.println(message);
-  }
 }
+
 void message(const String msg) {
   message(msg.c_str());
 }
@@ -31,6 +25,7 @@ void add_peer(const uint8_t * mac) {
     }
   }
 }
+
 void serial_mac(const uint8_t *mac_addr) {
   char macStr[18];
   snprintf(macStr, sizeof(macStr), "%02x%02x%02x%02x%02x%02x ",
@@ -102,7 +97,7 @@ void ShowByteArray(String test) {
 
 esp_err_t  send_message(const uint8_t * mac, byte action, String data) {
   char  myData[200];
-  byte n = sprintf(myData, "%s%s", (char) action, data);
+  byte n = sprintf(myData, "%c%s", (char) action,  data.c_str());
   myData[n] = 0;
 
   esp_err_t  result =  esp_now_send(mac, (const uint8_t *) &myData, n+2);
