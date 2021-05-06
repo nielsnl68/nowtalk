@@ -1,6 +1,9 @@
+#! /usr/bin/env node
 
 /*jshint esversion: 6 */
 
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
 
 
 const sqlite3 = require('sqlite3');
@@ -60,28 +63,35 @@ bindings.list()
     })
     .catch(err => {
         console.error(err);
-        process.exit(1);
+
     });
 
 
-const emitter = {
-    handlers: {},
 
-    on(code, handler) {
-        if (!this.handlers[code])
-            this.handlers[code] = [];
-        this.handlers[code].push(handler);
-    },
+function connect(commport) {
+    const serialPort = new SerialPort(commport, { baudRate: 115200, autoOpen: false });
 
-    emit(code, data) {
-        if (Array.isArray(this.handlers[code])) {
-            for (const handler of this.handlers[code])
-                handler(data);
-            return true;
-        } else
-            return false;
-    }
-};
+    const reconnect = function () {
+        if (!serialPort.isOpen) { serialPort.open(); }
+    };
+
+    serialPort.on('open', () => {
+        console.info("SerialPort is connected.");
+        emitter.emit('open', serialPort);
+    });
+    serialPort.on('close', () => {
+        console.warn("SerialPort closed ... waiting 5 sec.");
+        setTimeout(reconnect, 5000);
+    });
+    serialPort.on('error', () => {
+        console.error("SerialPort not found ... waiting 5 sec.");
+        setTimeout(reconnect, 5000);
+    });
+
+    reconnect();
+
+    return serialPort;
+}
 
 
 
@@ -91,18 +101,29 @@ function startProgramm(commport) {
     db = new sqlite3.Database('nowtalk.sqlite');
 
     db.serialize(function () {
-        db.run("CREATE TABLE IF NOT EXISTS users ( mac TEXT NOT NULL UNIQUE,   status INTEGER,   ip TEXT,   name TEXT NOT NULL, PRIMARY KEY(mac)");
+        db.run("CREATE TABLE IF NOT EXISTS users ( mac TEXT NOT NULL UNIQUE,   status INTEGER,   ip TEXT,   name TEXT NOT NULL, PRIMARY KEY(mac))");
 
         db.each("SELECT * FROM users", function (err, row) {
             users[row.mac] = row;
         });
     });
 
-
-    port = new SerialPort(commport, { baudRate: 115200 });
+    const port = connect(commport);
     const parser = port.pipe(new InterByteTimeout({ interval: 30 }));
 
-    parser.on('data', (data) => {
+    emitter.on('open', port => {
+        const msg = "*test me now\0";
+        const response = function (data) {
+            emitter.off("_#", response);
+            return true;
+        }
+        emitter.on("_#", response);
+        port.write(msg);
+    });
+
+
+    parser.on('data', data => {
+        console.log("> " + data);
         if (data.readUInt8(0) === 0x02) {
             msg = {};
             msg.mac = data.readUIntBE(1, 6);
@@ -112,30 +133,39 @@ function startProgramm(commport) {
                 msg.data = data.toString('utf8', 9, 9 + msg.size - 1);
                 msg.arrray = msg.data.split("\0x1f");
             }
+            msg._mac = msg.mac.toString(16);
+            msg._code = "h" + msg.code.toString(16);
             if (!emitter.emit(msg.code, msg)) {
-                process.exit(2);
+                console.error(msg);
+
             }
+        } else if (data.readUInt8(0) === 0x04) {
+            // mac address is removed from peer list;
+            mac = data.readUIntBE(1, 6).toString(16);
+            console.info("Peer " + mac + " is released");
 
         } else {
-            if (!emitter.emit(0, msg)) {
-                process.exit(3);
+            if (!emitter.emit("_" + data.toString('utf8', 0, 1), data)) {
+                console.error(data);
+
             }
         }
 
     });// will emit data if there is a pause between packets of at least 30ms
 
-
-
-    msg = "";
-    var x = new Uint8Array([0x02, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xbc, msg.length + 1, 0x01]);
-    buf = Buffer.alloc(msg.length + 9, x);
-    buf.write(msg, 9);
-    console.log(buf.toString());
-    port.write(buf);
 }
+emitter.on("_*", msg => {
+    console.info(msg);
+    return true;
+});
+      
+emitter.on("_!", msg => {
+    console.error(msg);
+    return true;
+});
 
 
-emitter.on(0x01, msg => {
+    emitter.on(0x01, msg => {
 
     if (!(user = users[msg.mac]) || (user.status & 0x04 != 0)) {
         if (allowGuests) {
@@ -189,6 +219,11 @@ emitter.on(0x0f, msg => {
 });
 
 
+emitter.on(0x77, msg => {
+    console.warn("ERROR: Last message to " + msg._mac + " was not send.");
+});
+
+
 function unpeer_mac(mac) {
     var buf = Buffer.alloc(7);
     buf.writeUInt8(0x03);
@@ -238,61 +273,16 @@ function update_db(user) {
     });
 }
 
-
-///program.help();
+//let i = 0;
+setInterval(() => {
+    //   console.log('Infinite Loop Test interval n:', i++);
+}, 2000);
 
 /*
-
-
-
-const port = new SerialPort('/dev/tty-usbserial1')
-
-
-
-
-
-
-
-
-
-
-
-
-
 ESpeak.initialize();
 ESpeak.onVoice(function(wav, samples, samplerate) {
     // TODO: Do something useful
 });
 ESpeak.speak("Hello world!");
-
-
-
-
-
-
-
-// The term() function simply output a string to stdout, using current style
-// output "Hello world!" in default terminal's colors
-term('Hello world!\n');
-
-term.table([
-    ['header #1', 'header #2', 'header #3'],
-    ['row #1', 'a much bigger cell, a much bigger cell, a much bigger cell... ', 'cell'],
-    ['row #2', 'cell', 'a medium cell'],
-    ['row #3', 'cell', 'cell'],
-    ['row #4', 'cell\nwith\nnew\nlines', '^YThis ^Mis ^Ca ^Rcell ^Gwith ^Bmarkup^R^+!']
-], {
-    hasBorder: true,
-    contentHasMarkup: true,
-    borderChars: 'lightRounded',
-    borderAttr: { color: 'blue' },
-    textAttr: { bgColor: 'default' },
-    firstCellTextAttr: { bgColor: 'blue' },
-    firstRowTextAttr: { bgColor: 'yellow' },
-    firstColumnTextAttr: { bgColor: 'red' },
-    width: 60,
-    fit: true   // Activate all expand/shrink + wordWrap
-}
-);
 
 */
