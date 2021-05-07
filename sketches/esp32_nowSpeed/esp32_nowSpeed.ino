@@ -8,25 +8,28 @@
   The above copyright notice and this permission notice shall be included in all
   copies or substantial portions of the Software.
 */
-#define VERSION 32.111
+#define VERSION 32.125
 
 
 #include <esp_now.h>
 #include <WiFi.h>
+#include "display.h"
+
 
 typedef struct {
+  char header[11] = "SpeedTest_";
   unsigned long msgid ;
-  char msg[145] = "qwertyuioplkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321";
+  char msg[290] = "_wertyuiolkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321qwertyuioplkjhgfdsazxcvbnm0987654321";
 } espnowsend_t;
 
 
 typedef struct {
     uint8_t mac[6];
     espnowsend_t msg;
-    size_t size;
+    uint8_t size;
 } espnow_t;
 
-#define QUEUE_SIZE  512
+#define QUEUE_SIZE  10
 
 static volatile int read_idx = 0;
 static volatile int write_idx = 0;
@@ -38,7 +41,7 @@ static espnow_t circbuf[QUEUE_SIZE];
 uint8_t bcmac[6] =   {0xff, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 unsigned long lastTime = 0;  
-unsigned long timerDelay = 10000;  // send readings timer
+unsigned long timerDelay = 1000;  // send readings timer
 
 void serial_mac(const uint8_t *mac_addr) {
   char macStr[64];
@@ -53,8 +56,9 @@ espnowsend_t msg;
 
 esp_err_t send_message() {
   msg.msgid = msgid ;  
-  msgid = msgid +1 ;
-  esp_err_t  result = esp_now_send(bcmac, (const uint8_t *) &msg, sizeof(msg));
+  msgid++ ;
+  uint8_t size = sizeof(msg)>250?250:sizeof(msg);
+  esp_err_t  result = esp_now_send(bcmac, (const uint8_t *) &msg, size);
   return result;
 }
 
@@ -66,19 +70,45 @@ void OnDataSent(const uint8_t *mac, esp_now_send_status_t sendStatus) {
     numberOfErrors = numberOfErrors +1;
   }
   hasSend = true;
+
+  send_message(); 
   
 }
 
+
+word missingPackages = 0;
+word oldpackages = 0;
+
+unsigned long lastMsgId =0;
+unsigned long lastsendMsgId =0;
+unsigned long oldReceived =0;
+unsigned long ReceiveTimer = 0;
  // Callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *buf, int size) {
     // copy to circular buffer
-    espnow_t data;
-    memcpy(data.mac, mac, 6);
-    memcpy(&data.msg.msgid, buf, sizeof(data.msg.msgid));
-    data.size = size;
-    circbuf[write_idx] = data;
-    receivedMessages =receivedMessages +1;
-    write_idx = (write_idx + 1) % QUEUE_SIZE;
+    ReceiveTimer = millis();
+    espnow_t espnow;
+    memcpy(espnow.mac, mac, 6);
+    if (memcmp(&espnow.msg.header,buf,sizeof(espnow.msg.header)) == 0) {
+      memcpy(&espnow.msg, buf, 250);
+        if (lastMsgId == 0) lastMsgId = espnow.msg.msgid - 1;
+        int x = (espnow.msg.msgid - lastMsgId)-1; 
+        if (x !=0) {
+          // Serial.printf("%6d-%6d = %d   %d\n",  lastMsgId, espnow.msg.msgid, x, missingPackages );
+       }
+        if (x > 0)  { missingPackages += x;}
+        if (x < 0)  { oldpackages= oldpackages+1;}
+        else { lastMsgId= espnow.msg.msgid;} 
+        if (bcmac[0] == 0xff) {
+          memcpy(bcmac, mac, 6);
+          add_peer(bcmac);
+        }
+        receivedMessages =receivedMessages +1;
+    } else {
+      Serial.print("receive error");
+    }
+    
+  //  write_idx = (write_idx + 1) % QUEUE_SIZE;
 }
 
 
@@ -106,6 +136,8 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   
+  initTFT();
+  
   if (esp_now_init() != 0) {
     Serial.println("* Error initializing ESP-NOW");
     return;
@@ -122,56 +154,31 @@ void setup() {
   
   add_peer(bcmac);
   send_message();
+  ShowMessage("Waiting");
 }
 
-word missingPackages = 0;
-word oldpackages = 0;
-
-unsigned long lastMsgId =0;
-unsigned long lastsendMsgId =0;
-unsigned long oldReceived =0;
 
 void loop() {
-   if (read_idx != write_idx) {
-       // Serial.print(read_idx, HEX); Serial.println(write_idx,HEX);
-        espnowsend_t espnow = circbuf[read_idx].msg;
-        if (lastMsgId == 0) lastMsgId = espnow.msgid - 1;
-        int x = (espnow.msgid - lastMsgId)-1; 
-        if (x >= 1)  { missingPackages= missingPackages+x;}
-        if (x <=-1)  { oldpackages= oldpackages+1; }
-        else { lastMsgId= espnow.msgid;}
-        
-        read_idx = (read_idx + 1) % QUEUE_SIZE;
-    }
-  if (hasSend) {
-    send_message();
-    hasSend = false;
-  }
-  if ((millis() - lastTime) > timerDelay) {
+   showVoltage();
+   if ((ReceiveTimer != 0 )&& ((millis() - ReceiveTimer) > 10000)) {
+    ReceiveTimer = 0 ;
+    ShowMessage("No Data");
+    lastMsgId = 0;
+   }
+ 
+   if (((millis() - lastTime) > timerDelay) && (ReceiveTimer != 0)) {
       unsigned long y = msgid ;
       unsigned long z = receivedMessages;
-      Serial.print("Send: ");
-      Serial.print(y - lastsendMsgId);
-      Serial.print(", Recv: ");
-      Serial.print(z - oldReceived);
-      Serial.print(", Missed: ");
-      Serial.print(missingPackages,3);
-      Serial.print(", Old: ");
-      Serial.print(oldpackages,3);   
-      Serial.print(", Errors: ");
-      Serial.print(numberOfErrors,3);   
-      Serial.print(", queued: ");
-      int x = read_idx - write_idx;
-      if (x<0) x= x+QUEUE_SIZE;
-//         Serial.print(read_idx, HEX);Serial.print(" "); Serial.print(write_idx,HEX); Serial.print(" ");
-      Serial.println(x);
-      
-      lastsendMsgId = y;
-      oldReceived = z;
+     // Serial.printf("Send: %6d, Recv: %6d, Missed: %3d, Old: %3d, Errors: %3d\n", 
+     //                 y - lastsendMsgId, z - oldReceived,
+     //                 missingPackages, oldpackages, numberOfErrors);   
+      showData(y - lastsendMsgId, z - oldReceived, missingPackages, oldpackages, numberOfErrors);
+      lastsendMsgId = y ;
+      oldReceived   = z;
 
       missingPackages =0;
-      oldpackages=0;   
-      numberOfErrors=0;   
+      oldpackages     =0;   
+      numberOfErrors  =0;   
 
 
          

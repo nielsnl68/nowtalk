@@ -12,8 +12,6 @@ const sqlite3 = require('sqlite3');
 const { Command, exitOverride } = require('commander');
 const program = new Command();
 
-const term = require('terminal-kit').terminal;
-
 const SerialPort = require('serialport');
 const bindings = require('@serialport/bindings');
 const InterByteTimeout = require('@serialport/parser-inter-byte-timeout');
@@ -126,15 +124,14 @@ function startProgramm(commport) {
         console.log("> " + data);
         if (data.readUInt8(0) === 0x02) {
             msg = {};
-            msg.mac = data.readUIntBE(1, 6);
+            msg.mac = data.readUIntBE(1, 6).toString(16);
             msg.size = data.readUIntBE(7, 1);
-            msg.code = data.readUIntBE(8, 1);
-            if (msg.size >= 1) {
+            msg.code = "h" +data.readUIntBE(8, 1).code.toString(16);
+            if (msg.size > 1) {
                 msg.data = data.toString('utf8', 9, 9 + msg.size - 1);
                 msg.arrray = msg.data.split("\0x1f");
             }
-            msg._mac = msg.mac.toString(16);
-            msg._code = "h" + msg.code.toString(16);
+            msg._code =  msg;
             if (!emitter.emit(msg.code, msg)) {
                 console.error(msg);
 
