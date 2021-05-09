@@ -70,7 +70,7 @@ Code | Discription                              | Transfer                    | 
 0xe0 | Start update firmware                    | server to broadcast |  size of file,checksum of file
 0xe1 | Upload update firmware                   | server to broadcast | package counter, fileblock 
 0xe2 | Ack update now                           | client to erver |
-0xe2 | No Ack file was not correct  | client to erver |
+0xe3 | No Ack file was not correct  | client to erver |
 ---- |   |    |
 0xff | Alarm help needed.                       | client to broadcast |
 
