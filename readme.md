@@ -44,10 +44,10 @@ Code | Discription                              | Transfer                    | 
 0x01 | Ping the server                          | client to server/broadcast |
 0x02 | Pong from server                         | server to client |
 0x03 | Reguest client details (new in network)  | server to client |
-0x04 | guist use request                        | client to server |incl. name and IP
+0x04 | guest use request                        | client to server |incl. name and IP
 0x05 | New device                               | client to server |
 ---- |   |   |
-0x08 | Reject new client                        | server to client            |  
+0x08 | Reject new client                        | server to client |  
 0x09 | Accept new client                        | server to client | incl. new name and IP
 ---- |   |   |
 0x0d | Update username                          | server to client | old and new username
@@ -66,13 +66,12 @@ Code | Discription                              | Transfer                    | 
 ---- |   |   |
 0x40 | Client peered on extern network          | network to server |
 0x4f | Client left from extern network          | network to server |
----- | ---------------------------------------- | ---------------------------- |
+---- |   |   |
 0xe0 | Start update firmware                    | server to broadcast |  size of file,checksum of file
 0xe1 | Upload update firmware                   | server to broadcast | package counter, fileblock 
 0xe2 | Ack update now                           | client to erver |
 0xe2 | No Ack file was not correct  | client to erver |
-
----- | ---------------------------------------- | ---------------------------  |
+---- |   |    |
 0xff | Alarm help needed.                       | client to broadcast |
 
 ### Alarm protocol
