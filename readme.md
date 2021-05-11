@@ -44,14 +44,16 @@ Code | Discription                              | Transfer                    | 
 0x01 | Ping the server                          | client to server/broadcast |
 0x02 | Pong from server                         | server to client |
 0x03 | Reguest client details (new in network)  | server to client |
-0x04 | Guest use request                        | client to server |incl. name and IP
+0x04 | Guest use request                        | client to server | incl. name and IP
 0x05 | New device                               | client to server |
 ---- |   |   |
 0x07 | Accept new client                        | server to client | incl. new name and IP
 ---- |   |   |
 0x0d | Update username                          | server to client | old and new username
-0x0e | Update owner IP (used in other network)  | server to client |old and new IP
-0x0f | Ack update owner IP                      | client to server | dummy, for now
+0x0e | Update owner IP (used in other network)  | server to client | old and new IP
+---- |   |   |
+0x10 | Ack update                               | client to server | 
+0x11 | Nack update                              | client to server | 
 ---- |   |   |
 0x30 | Start call request                       | client to server | 
 0x31 | Ack start speaking                       | server to client | 
