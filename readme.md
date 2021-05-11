@@ -44,19 +44,20 @@ Code | Discription                              | Transfer                    | 
 0x01 | Ping the server                          | client to server/broadcast |
 0x02 | Pong from server                         | server to client |
 0x03 | Reguest client details (new in network)  | server to client |
-0x04 | guest use request                        | client to server |incl. name and IP
+0x04 | Guest use request                        | client to server |incl. name and IP
 0x05 | New device                               | client to server |
 ---- |   |   |
-0x08 | Reject new client                        | server to client |  
-0x09 | Accept new client                        | server to client | incl. new name and IP
+0x07 | Accept new client                        | server to client | incl. new name and IP
 ---- |   |   |
 0x0d | Update username                          | server to client | old and new username
 0x0e | Update owner IP (used in other network)  | server to client |old and new IP
 0x0f | Ack update owner IP                      | client to server | dummy, for now
 ---- |   |   |
 0x30 | Start call request                       | client to server | 
-0x31 | Deliver other mac address                | server to client | mac from other client
-0x32 | Other client not available               | server to client |
+0x31 | Ack start speaking                       | server to client | 
+0x32 | System busy wait a moment                | server to client | 
+0x33 | Deliver other mac address                | server to client | mac from other client
+0x34 | Other client not available               | server to client |
 ---- |   |   |
 0x37 | Request call                             | client to client |
 0x38 | Receive call                             | client to client |
@@ -67,7 +68,7 @@ Code | Discription                              | Transfer                    | 
 0x40 | Client peered on extern network          | network to server |
 0x4f | Client left from extern network          | network to server |
 ---- |   |   |
-0xe0 | Start update firmware                    | server to broadcast |  size of file,checksum of file
+0xe0 | Start update firmware                    | server to broadcast | size of file,checksum of file
 0xe1 | Upload update firmware                   | server to broadcast | package counter, fileblock 
 0xe2 | Ack update now                           | client to erver |
 0xe3 | No Ack file was not correct  | client to erver |
