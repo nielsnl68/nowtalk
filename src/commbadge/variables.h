@@ -1,54 +1,60 @@
 #ifndef NOWTALK_VARBS
 #define NOWTALK_VARBS
 
+#include <Arduino.h>
+
 #include "FS.h"
 #include "SPIFFS.h"
+#include <ArduinoJson.h>
 
-#define VERSION 32.230
+
+#define VERSION 32.234
 
 struct config_t
 {
-  unsigned long lastTime = 0;
-  unsigned long timerDelay = 30000; // send readings timer
-  unsigned long eventInterval = 5000;
-  char masterIP[32] = "<None>";
-  char userName[64] = "<None>";
-  uint8_t masterAddress[6] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-  byte channel = 0;
-  char hostname[64] = "";
-  int port;
-  const char *configFile = "/config.json"; // <- SD library uses 8.3 filenames
+    unsigned long lastTime = 0;
+    unsigned long timerDelay = 30000; // send readings timer
+    unsigned long eventInterval = 5000;
+    bool registrationMode = false;
+    char masterIP[32]   = "<None>";
+    char userName[64] = "<None>";
+    uint8_t masterAddress[6] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    byte channel = 0;
+    char hostname[64] = "";
+    int port;
+    const char *configFile = "/config.json"; // <- SD library uses 8.3 filenames
 };
 
 config_t config;
 
 typedef struct
 {
-  uint8_t mac[6];
-  uint8_t buf[256];
-  size_t count;
+    uint8_t mac[6];
+    uint8_t code;
+    char buf[256];
+    size_t count;
 } nowtalk_t;
 
 typedef struct
 {
-  uint8_t status;
-  uint8_t mac[6];
-  char name[64];
-  char orginIP[32];
-  byte prev;
-  byte next;
+    uint8_t status;
+    uint8_t mac[6];
+    char name[64];
+    char orginIP[32];
+    byte prev;
+    byte next;
 } nowtalklist_t;
 
 const byte _maxUserCount = 24;
 
 typedef struct
 {
-  byte first_element = 0;
-  byte last_element = 0;
-  byte current = 0xff;
-  byte previous = 0xff;
-  byte count = 0;
-  const byte maxCount = _maxUserCount;
+    byte first_element = 0;
+    byte last_element = 0;
+    byte current = 0xff;
+    byte previous = 0xff;
+    byte count = 0;
+    const byte maxCount = _maxUserCount;
 } nowtalklist_stats_t;
 nowtalklist_stats_t stats;
 
@@ -59,10 +65,12 @@ nowtalklist_t users[_maxUserCount];
 
 static volatile int read_idx = 0;
 static volatile int write_idx = 0;
-static nowtalk_t circbuf[QUEUE_SIZE] ={};
+nowtalk_t circbuf[QUEUE_SIZE] = {};
 
 String inputString = "";     // a String to hold incoming data
 bool stringComplete = false; // whether the string is complete
+
+int vref = 1100;
 
 // REPLACE WITH RECEIVER MAC Address
 ///
@@ -79,12 +87,13 @@ bool stringComplete = false; // whether the string is complete
 #define ESPTALK_CLIENT_DETAILS 0x04
 #define ESPTALK_CLIENT_NEWPEER 0x05
 
-#define ESPTALK_SERVER_REJECT 0x08
-#define ESPTALK_SERVER_ACCEPT 0x09
+#define ESPTALK_SERVER_ACCEPT 0x07
 
 #define ESPTALK_SERVER_NEW_NAME 0x0d
 #define ESPTALK_SERVER_NEW_IP 0x0e
-#define ESPTALK_CLIENT_ACK 0x0f
+
+#define ESPTALK_CLIENT_ACK 0x10
+#define ESPTALK_CLIENT_NACK 0x11
 
 #define ESPTALK_CLIENT_START_CALL 0x30
 #define ESPTALK_SERVER_SEND_PEER 0x31
@@ -117,76 +126,80 @@ bool stringComplete = false; // whether the string is complete
 #define ESPTALK_STATUS_NEW 0x04
 #define ESPTALK_STATUS_GONE 0x00
 
-#include <ArduinoJson.h>
+
 
 // load configuration from a file
 void loadConfiguration(bool clear = false)
 {
-  if (clear)
-    SPIFFS.remove(config.configFile);
+    if (clear)
+        SPIFFS.remove(config.configFile);
 
-  // Open file for reading
-  File file = SPIFFS.open(config.configFile);
+    // Open file for reading
+    fs::File file = SPIFFS.open(config.configFile);
 
-  // Allocate a temporary JsonDocument
-  // Don't forget to change the capacity to match your requirements.
-  // Use arduinojson.org/v6/assistant to compute the capacity.
-  StaticJsonDocument<524> doc;
+    // Allocate a temporary JsonDocument
+    // Don't forget to change the capacity to match your requirements.
+    // Use arduinojson.org/v6/assistant to compute the capacity.
+    StaticJsonDocument<524> doc;
 
-  // Deserialize the JSON document
-  DeserializationError error = deserializeJson(doc, file);
-  if (error)
-    Serial.println(F("Failed to read file, using default configuration"));
-  file.close();
+    // Deserialize the JSON document
+    DeserializationError error = deserializeJson(doc, file);
+    if (error)
+        Serial.println(F("Failed to read file, using default configuration"));
+    file.close();
 
-  // Copy values from the JsonDocument to the Config
-  config.channel = doc["channel"] | 0;
-  config.port = doc["port"] | 2731;
-  strlcpy(config.hostname, doc["hostname"] | "example.com", sizeof(config.hostname)); // <- destination's capacity
+    // Copy values from the JsonDocument to the Config
+    config.channel = doc["channel"] | 0;
+    config.port = doc["port"] | 2731;
+    strlcpy(config.hostname, doc["hostname"] | "", sizeof(config.hostname)); // <- destination's capacity
 
-  config.timerDelay = doc["timerDelay"] | 30000;      // send readings timer
-  config.eventInterval = doc["eventInterval"] | 5000; //EVENT_INTERVAL_MS
+    config.timerDelay = doc["timerDelay"] | 30000;      // send readings timer
+    config.eventInterval = doc["eventInterval"] | 5000; //EVENT_INTERVAL_MS
 
-  strlcpy(config.masterIP, doc["masterIP"] | "", sizeof(config.masterIP)); // <- destination's capacity
-  strlcpy(config.userName, doc["userName"] | "", sizeof(config.userName)); // <- destination's capacity
+    strlcpy(config.masterIP, doc["masterIP"] | "<None>", sizeof(config.masterIP)); // <- destination's capacity
+    strlcpy(config.userName, doc["userName"] | "<None>", sizeof(config.userName)); // <- destination's capacity
+    if ((strcmp(config.masterIP, "<None>") == 0) || (strcmp(config.userName, "<None>") == 0))
+    {
+        config.registrationMode = true;
+    }
 }
 
 // Saves the configuration to a file
 void saveConfiguration()
 {
-  // Delete existing file, otherwise the configuration is appended to the file
-  SPIFFS.remove(config.configFile);
+    // Delete existing file, otherwise the configuration is appended to the file
+    SPIFFS.remove(config.configFile);
 
-  File file = SPIFFS.open(config.configFile, FILE_WRITE);
-  if (!file)
-  {
-    Serial.println(F("Failed to create file"));
-    return;
-  }
+     fs::File file = SPIFFS.open(config.configFile, FILE_WRITE);
+    if (!file)
+    {
+        Serial.println(F("Failed to create file"));
+        return;
+    }
 
-  // Allocate a temporary JsonDocument
-  // Don't forget to change the capacity to match your requirements.
-  // Use arduinojson.org/assistant to compute the capacity.
-  StaticJsonDocument<524> doc;
+    // Allocate a temporary JsonDocument
+    // Don't forget to change the capacity to match your requirements.
+    // Use arduinojson.org/assistant to compute the capacity.
+    StaticJsonDocument<524> doc;
 
-  // Copy values from the JsonDocument to the Config
-  doc["channel"] = config.channel;
-  doc["port"] = config.port;
-  doc["hostname"] = config.hostname;
+    // Copy values from the JsonDocument to the Config
+    doc["channel"] = config.channel;
+    doc["port"] = config.port;
+    doc["hostname"] = config.hostname;
 
-  doc["timerDelay"] = config.timerDelay;       // send readings timer
-  doc["eventInterval"] = config.eventInterval; //EVENT_INTERVAL_MS
+    doc["timerDelay"] = config.timerDelay;       // send readings timer
+    doc["eventInterval"] = config.eventInterval; //EVENT_INTERVAL_MS
 
-  doc["masterIP"] = config.masterIP;
-  doc["userName"] = config.userName;
+    doc["masterIP"] = config.masterIP;
+    doc["userName"] = config.userName;
 
-  if (serializeJson(doc, file) == 0)
-  {
-    Serial.println(F("Failed to write to file"));
-  }
+    if (serializeJson(doc, file) == 0)
+    {
+        Serial.println(F("Failed to write to file"));
+    }
 
-  // Close the file
-  file.close();
+    // Close the file
+    file.close();
 }
 
 #endif

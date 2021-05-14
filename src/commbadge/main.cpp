@@ -15,29 +15,29 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 
-#include "FS.h"
-#include "SPIFFS.h"
+#include <TFT_eSPI.h>
 
 #include "variables.h"
 
-#include "nowtalk.h"
+ #include "nowtalk.h"
+ #include "esp_adc_cal.h"
+ #include "switchboard.h"
+#include "Button2.h"
 
-#include "switchboard.h"
+#define BUTTON_1 35
+#define BUTTON_2 13
 
-//#include "firmwareUpd.h"
-//#include "talkwebsite.h"
+ TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom library
+
+Button2 btn1(BUTTON_1);
+Button2 btn2(BUTTON_2);
 
 // Callback when data is sent
 void OnDataSent(const uint8_t *mac, esp_now_send_status_t sendStatus)
 {
     if (sendStatus != ESP_NOW_SEND_SUCCESS)
     {
-        message(("* search new master"));
-        bool isNewMaster = (config.masterAddress[0] == 0);
-        if (!isNewMaster)
-            esp_now_del_peer(config.masterAddress);
-        config.masterAddress[0] = 0;
-        broadcast(0x02, config.masterIP);
+        /// do something;
     }
 }
 
@@ -45,11 +45,17 @@ void OnDataSent(const uint8_t *mac, esp_now_send_status_t sendStatus)
 void OnDataRecv(const uint8_t *mac, const uint8_t *buf, int count)
 {
     // copy to circular buffer
-    nowtalk_t *data = &circbuf[write_idx];
-    memcpy(data->mac, mac, 6);
-    memcpy(data->buf, buf, count);
-    data->count = count;
-
+  
+    nowtalk_t data;
+    memcpy(data.mac, mac, 6);
+    data.code = buf[0];
+    memset(data.buf, 0, 255);
+    if (count > 1)
+    {
+        memcpy(data.buf, buf + 1, count - 1);
+    }
+    data.count = count - 1;
+    circbuf[write_idx] = data;
     write_idx = (write_idx + 1) % QUEUE_SIZE;
 }
 
@@ -60,24 +66,30 @@ void handleCommand()
     if (inputString.equals("clear"))
     {
         loadConfiguration(true);
-        Serial.println("! OK");
         ESP.restart();
     }
     else if (inputString.equals("info"))
     {
+        Serial.print(badgeID());
+        Serial.print('~');
         if (config.masterAddress[0] == 0)
         {
-            Serial.print("<No Master Mac> ");
+            Serial.print("<none>");
         }
         else
         {
             serial_mac(config.masterAddress);
         }
+        Serial.print('~');
         Serial.print(config.masterIP);
+        Serial.print('~');
+        Serial.print(config.userName);
+        Serial.print('~');
+        Serial.println(VERSION);
     }
     else
     {
-        Serial.println("! ERROR");
+        Serial.println("ERROR: >" + inputString + "<");
     }
 }
 
@@ -87,6 +99,8 @@ void serialEvent()
     {
         // get the new byte:
         char inChar = (char)Serial.read();
+        if (inChar == '\r')
+            continue;
         if (inChar == '\n')
         {
             stringComplete = true;
@@ -95,6 +109,24 @@ void serialEvent()
         {
             inputString += inChar;
         }
+    }
+}
+
+void RegisterBadge(Button2 &b)
+{
+    if (config.registrationMode)
+    {
+        broadcast(ESPTALK_CLIENT_NEWPEER, "");
+        // config.registrationMode = true;
+        message("Badge ID:\n" + badgeID());
+    }
+    else if (config.masterAddress[0] != 0)
+    {
+        send_message(config.masterAddress, ESPTALK_CLIENT_START_CALL, "");
+    }
+    else
+    {
+        broadcast(ESPTALK_CLIENT_PING, "");
     }
 }
 
@@ -119,14 +151,16 @@ void setup()
     esp_wifi_set_channel(config.channel, WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(false);
 
-    message("Version: " + String(VERSION, 3));
+    Serial.printf("ESP32 Chip model = %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
+
+    message("Application version: " + String(VERSION, 3));
 
     Serial.print(F("* MasterIP: "));
     Serial.println(config.masterIP);
+    Serial.print(F("* Username: "));
+    Serial.println(config.userName);
     Serial.print(F("* MAC Address: "));
     Serial.println(WiFi.macAddress());
-    Serial.print(F("* Station IP Address: "));
-    Serial.println(WiFi.localIP());
     Serial.print(F("* WiFi Channel: "));
     Serial.println(WiFi.channel());
 
@@ -140,32 +174,43 @@ void setup()
     esp_now_register_recv_cb(OnDataRecv);
 
     config.lastTime = millis() - (config.timerDelay + 10);
+
+    btn1.setClickHandler(RegisterBadge);
+    btn2.setClickHandler(RegisterBadge);
 }
+
+void button_loop()
+{
+    btn1.loop();
+    btn2.loop();
+}
+
 
 void loop()
 {
+    button_loop();
     if (read_idx != write_idx)
     {
-        nowtalk_t *espnow = &circbuf[read_idx];
-        handlePackage(espnow->mac, espnow->buf, espnow->count);
+        nowtalk_t espnow = circbuf[read_idx];
+        handlePackage(espnow.mac, espnow.code, espnow.buf, espnow.count);
         read_idx = (read_idx + 1) % QUEUE_SIZE;
     }
-
-    if ((millis() - config.lastTime) > config.timerDelay)
+    if (!config.registrationMode)
     {
-        // Set values to send
-        if (config.masterAddress[0] == 0)
+        if ((millis() - config.lastTime) > config.timerDelay + (config.masterAddress[0] == 0 ? 5 : 1))
         {
-            Serial.println("* Search master");
-            broadcast(0x02, "");
+            if (config.masterAddress[0] == 0)
+            {
+                Serial.println("Search master");
+                broadcast(0x01, "");
+            }
+            else
+            {
+                send_message(config.masterAddress, 0x01, "");
+            }
+            config.lastTime = millis();
         }
-        else
-        {
-            send_message(config.masterAddress, 0x02, "");
-        }
-        config.lastTime = millis();
     }
-
     if (stringComplete)
     {
 

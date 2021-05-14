@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"name": "nowTalk",
+			"path": "."
+		}
+	],
+    "settings": {
+        "git.ignoreLimitWarning": true
+    }
+}
