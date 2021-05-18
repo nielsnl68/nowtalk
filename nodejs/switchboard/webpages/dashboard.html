@@ -1,0 +1,405 @@
+<!DOCTYPE HTML>
+<html lang="en">
+
+<head>
+    <title>NowTalk Switchboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.3/css/all.css">
+    <meta charset="utf-8">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css"
+        integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
+    <style>
+        .reading {
+            font-size: 2.8rem;
+        }
+
+        .packet {
+            color: #bebebe;
+        }
+
+        .card.temperature {
+            color: #fd7e14;
+        }
+
+        .card.humidity {
+            color: #1b78e2;
+        }
+
+        .scrolltabletable {
+            display: block;
+            height: 363px;
+            overflow-y: scroll;
+        }
+
+        .scrolltable {
+            display: block;
+            height: 400px;
+            overflow-y: scroll;
+        }
+    </style>
+</head>
+
+<body class="alert-primary ">
+    <nav class="navbar navbar-dark bg-primary py-1">
+        <div class="container-fluid">
+            <span class="navbar-brand  mr-auto py-0  ">NowTalk - <span id="sts_switchboardName" class="text-info">Name
+                    unknown</span></span>
+
+
+            <div class="nav-item btn-group">
+
+                <button id="btnStatusinfo" type="button" class="btn btn-primary btn-sm dropdown-toggle"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                    Status
+                </button>
+                <div class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="btnStatusinfo">
+
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Version <small
+                            id="sts_version"></small></div>
+                    <div class="dropdown-divider  py-1"></div>
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Externel IP <small
+                            id="sts_externIP"></small></div>
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Mac address <small
+                            id="sts_mac"></small></div>
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Channel <small
+                            id="sts_channel"></small></div>
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Bridge ID <small
+                            id="sts_bridgeid"></small></div>
+                </div>
+            </div>
+        </div>
+
+    </nav>
+    <main role="main" class="container" id="main">
+
+        <div class="album mt-5 ">
+            <div class="container">
+
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card mb-4 humidity shadow-sm">
+                            <div class="card-header">
+                                <i class="fas fa-tint"></i> Active badges
+                            </div>
+                            <div class="card-body p-0 ">
+                                <table class="table table-sm mb-0 ">
+                                    <colgroup>
+                                        <col style="width:70px">
+                                        <col style="width:130px">
+                                        <col style="width:200px">
+                                        <col style="width:150px">
+                                    </colgroup>
+
+                                    <thead class="table-secondary">
+                                        <tr>
+                                            <th>Status</th>
+                                            <th>Node</th>
+                                            <th>Name</th>
+                                            <th>Externel IP</th>
+                                            <th>Activity</th>
+                                        </tr>
+                                    </thead>
+                                </table>
+                                <div class="scrolltabletable">
+                                    <table class="table table-sm table-hover table-striped"
+                                        style="table-layout: fixed;">
+                                        <colgroup>
+                                            <col style="width:70px">
+                                            <col style="width:130px">
+                                            <col style="width:200px">
+                                            <col style="width:150px">
+                                        </colgroup>
+                                        <tbody id="nodes">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="col-md-4">
+                        <div class="card mb-4 temperature shadow-sm">
+                            <div class="card-header">
+                                <i class="fas fa-comments"></i> Messages
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="container-fluid scrolltable" id="msgbody">
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="newBadgeAlert" class="alert alert-warning alert-dismissible fade fixed-bottom" role="alert">
+            <span id="newBadgeConfirm">
+                <strong>Hello!</strong> Did you just requested to add a new commbadge to this switchboard?
+                <button class="ms-3 btn btn-warning btn-sm" type="button" id="newbadgeYes"
+                    data-bs-target="#newBadgeForm" aria-expanded="false" aria-controls="newBadgeForm">Yes</button>
+            </span>
+            <button id="newbadgeClose" type="button" class="btn-close" aria-label="Close"></button>
+            <form class="my-0 needs-validation" id="newBadgeForm">
+                <div class="row   align-items-center">
+                    <div class="col-md-1"></div>
+                    <div class="col-md-3">
+                        <label for="badgeid" class="form-label">Badge Id code:</label>
+                        <input type="input" id="badgeid" class="form-control form-control-sm"
+                            aria-describedby="badgeidhelp" minlength="8" maxlength="8" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="input" id="username" class="form-control form-control-sm"
+                            aria-describedby="usernameHelpInline" required>
+                    </div>
+                    <div class="col-2">
+                        <button id="newbadgeAdd" type="submit" class="btn btn-light"
+                            aria-label="Close">Register</button>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-auto" id="newBasgeMsgs">
+                        <span id="badgeidhelp" class="form-text">
+                            Must be 8 characters long.
+                        </span>
+                        <span id="usernameHelpInline" class="form-text">
+                            You can choose any name. But make sure you can speak it easly.
+                        </span>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </main><!-- /.container -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-gtEjrD/SeCtmISkJkNUaaKMoLD0//ElJ19smozuHV6z3Iehds+3Ulb9Bn9Plx0x4" crossorigin="anonymous">
+        </script>
+    <script>
+        $(document).ready(function () {
+            'use strict'
+            var _errormsg = null;
+
+            if (!!window.EventSource) {
+                var source = new EventSource('/');
+
+                source.onmessage = (message) => {
+                    if (!message || !message.data) return console.error('skipping empty message')
+                    const data = JSON.parse(message.data, {})
+
+                    switch (data[0]) {
+                        case "config":
+                            callUpdateConfig(data[1]);
+                            break;
+                        case "newbadge":
+                            callNewBadge(data[1]);
+                            break;
+                        case 'msg':
+                            callAddMessage(data[1], data[2]);
+                            break;
+                        case 'msgs':
+                            populateMsgs(data[1]);
+                            break;
+                        case 'update':
+                            callUpdateBadges(data[1], data[2])
+                            break;
+                        default:
+                            console.log(data[0], data);
+                    }
+                }
+
+                source.onopen = (e) => {
+                    if (_errormsg != null) {
+                        _errormsg.hide();
+                        $("#main").remove(_errormsg);
+                        _errormsg = null;
+                    }
+                }
+
+                source.onerror = (e) => {
+                    if ((e.target.readyState != EventSource.OPEN) && _errormsg == null) {
+                        _errormsg = $("<div class='alert alert-danger m-1 p-1  text-center small'  role='alert'>Server has been disconnected.</div>");
+                        $("#main").prepend(_errormsg);
+                    }
+                }
+                function callUpdateConfig(obj) {
+                    document.getElementById("sts_switchboardName").innerHTML = obj.switchboardName;
+                    document.getElementById("sts_version").innerHTML = obj.version + "/" + obj.bridge.version;
+                    document.getElementById("sts_externIP").innerHTML = obj.externelIP || "";
+                    document.getElementById("sts_mac").innerHTML = obj.bridge.mac;
+                    document.getElementById("sts_channel").innerHTML = obj.bridge.channel;
+                    document.getElementById("sts_bridgeid").innerHTML = obj.bridge.bridgeID;
+                }
+
+                function callNewBadge(obj) {
+                    if (obj === false) {
+                        $("#newBadgeAlert").removeClass("show");
+                        $("#newBadgeConfirm").hide();
+                        $("#newbadgeYes").off('click');
+                        $("#newbadgeClose").off('click');
+                        $("#newBadgeForm").off('submit');
+                        return;
+                    }
+
+                    $("#newBadgeConfirm").show();
+                    $("#newBadgeForm").hide();
+                    $("#newBadgeAlert").addClass("show");
+                    $("#newbadgeClose").on("click", function () {
+                        $("#newbadgeClose").off("click");
+                        $("newBadgeForm").off('submit');
+                        $("#newbadgeYes").off('click');
+                        $("#newBadgeAlert").removeClass("show");
+                        $.post("/p",
+                            {
+                                closed: true,
+                                action: "newBadge"
+                            });
+
+                    });
+                    $("#newbadgeYes").on('click', function () {
+                        $("#newBadgeConfirm").hide();
+                        $("#newBadgeForm").show();
+                        $("#badgeid").val("");
+                        $("#username").val("");
+                        $("#newBadgeForm").on("submit", function (event) {
+                            let form = document.getElementById("newBadgeForm");// $("#newBadgeForm");1
+                            event.preventDefault()
+                            event.stopPropagation()
+                            if (!form.checkValidity()) {
+                                return;
+                            }
+                            form.classList.add('was-validated')
+                            $.post("/p",
+                                {
+                                    badgeid: $("#badgeid").val(),
+                                    username: $("#username").val(),
+                                    action: "newBadge"
+                                });
+                            $("#newbadgeClose").click();
+                        });
+
+                    });
+
+                }
+
+                function callAddMessage(kind, msg) {
+                    let row = $("<div class='row'></div>");
+                    let _msg = $("<div class='m-0  p-0 small'  role='alert'>" + msg + "</div>");
+                    switch (kind) {
+                        case 'recv':
+                            _msg.addClass("col-10 px-1 mt-1 text-success border rounded-end alert-secondary  ");
+                            break;
+                        case 'send':
+                            row.append("<div class='col-2'></div>");
+                            _msg.addClass("text-end col-10 mt-1 px-1 text-primary rounded-start alert-secondary ");
+                            break;
+                        default:
+                            _msg.addClass("col-12 text-" + kind);
+                    }
+                    row.append(_msg);
+                    $("#msgbody").append(row);
+                    var elem = document.getElementById('msgbody');
+                    elem.scrollTop = elem.scrollHeight;
+                }
+
+                function populateMsgs(list) {
+                    $("#msgbody").empty();
+                    list.forEach((item, index) => {
+                        callAddMessage(item[0], item[1]);
+                    });
+                }
+
+                function callUpdateBadges(list, time) {
+                    let table = $("#nodes");
+                    table.empty();
+                    list.forEach((item, index) => {
+                        //       return { mac: useHexMac ? this._mac : this.mac, status: this.status, ip: this.ip, name: this.name, time: this.timestamp };
+                        let status = ''; // item.status.toString(16);
+                        let isActive = ((item.status & 0x01) == 0x01) && ((item.status & 0x80) != 0x80);
+                        if ((item.status) == 0x00) {
+                            status = '<i class="text-primary fas fa-handshake"></i>';
+                        } else if ((item.status & 0x10) == 0x10) {
+                            status = isActive ? '<i class="text-success fas fa-user"></i>' : '<i class="text-secondary fas fa-user-alt-slash"></i>';
+                        } else if ((item.status & 0x18) == 0x18) {
+                            status = isActive ? '<i class="text-success fas fa-people-arrows"></i>' : '<i class="text-secondary fas fa-people-arrows"></i>';
+                        } else if ((item.status & 0x20) == 0x20) {
+                            status = isActive ? '<i class="text-success fas fa-users"></i>' : '<i class="text-secondary fas fa-users-slash"></i>';
+                        } else if ((item.status & 0x70) == 0x00) {
+                            status = status = isActive ? '<i class="text-success fas fa-globe"></i>' : '<i class="text-secondary fas fa-globe"></i>';
+                        } else {
+                            status = "<span>" + item.status.toString(16) + "</span>";
+                        }
+                        status = $(status);
+                        status.attr("hint", item.status.toString(16));
+                        if ((item.status & 0x80) == 0x80) {
+                            status.addClass('text-danger').removeClass('text-primary');
+                        }
+
+
+                        /*
+                        <i class="far fa-comments"></i>
+                        <i class="fas fa-bullhorn"></i>
+                        <i class="fas fa-deaf"></i>
+                        <i class="fas fa-globe"></i>
+                        <i class="fas fa-microphone-alt-slash"></i>
+                        <i class="fas fa-user"></i>
+                        <i class="fas fa-user-alt-slash"></i>
+                        <i class="fas fa-users"></i>
+                        
+                        <i class="fas fa-people-arrows"></i>
+                        <i class="fas fa-mail-bulk"></i>
+                        <i class="fas fa-handshake-slash"></i>
+                        */
+
+                        let x = item.time;
+                        let progress = '<div class="progress-bar" role="progressbar" aria-valuenow="' + x + '" aria-valuemin="0" aria-valuemax="100" style="width: ' + x + '%"></div>';
+                        progress = "<div class='progress'>" + progress + "</div>";
+                        let row = "<td  class='py-0 text-center align-middle'></td><td>" + item.mac.substr(1) + "</td><td>" + item.name + "</td><td>" + item.ip + "</td><td class='align-middle'>" + progress + "</td>";
+                        if (table.has("#" + item.mac).length == 0) {
+                            table.append("<tr id='" + item.mac + "'></tr>");
+                        }
+                        $("#" + item.mac).empty();
+                        $("#" + item.mac).append(row);
+                        $("#" + item.mac).data('time', time);
+                        let xy = $("#" + item.mac).children().first();
+
+                        xy.append(status);
+                    });
+
+                }
+
+                function checkBadgeID(code) {
+                    let baseChars = "0123456789AbCdEfGhIjKlMnOpQrStUvWxYz";
+                    const baseCount = baseChars.length + 1;
+                    baseChars += "aBcDeFgHiJkLmNoPqRsTuVwXyZ";
+                    let length = code.length;
+                    var count = 0;
+                    var arr = [];
+                    if (length != 8) return false;
+                    for (let index = 6; index >= 0; index--) {
+                        let chr = code.charAt(index);
+                        count += baseChars.indexOf(chr);
+                        arr.push([count, baseChars.indexOf(chr), chr]);
+                    }
+                    let crc = count % baseCount, chr = code.charAt(7);
+                    return crc === baseChars.indexOf(chr);
+                }
+
+                const email = document.getElementById("badgeid");
+
+                badgeid.addEventListener("input", function (event) {
+                    let id = $(badgeid).val();
+                    if (!checkBadgeID(id)) {
+                        email.setCustomValidity("This is an invalid badgeID. The code is case sensitive!");
+                    } else {
+                        email.setCustomValidity("");
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>

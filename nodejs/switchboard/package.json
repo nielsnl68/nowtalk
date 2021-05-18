@@ -6,16 +6,18 @@
   "license": "ISC",
   "version": "0.12.3",
   "dependencies": {
+    "admin-lte": "github:ColorlibHQ/AdminLTE#v4-dev",
     "axios": "^0.21.1",
+    "better-sqlite3": "^7.4.0",
     "commander": "^7.2.0",
-    "crc16-js": "^1.0.0",
-    "enquirer": "^2.3.6",
     "ini": "^1.3.8",
+    "jayson": "^3.6.2",
+    "local-ip": "^2.0.0",
+    "node-crc16": "^2.0.7",
     "serialport": "^9.0.7",
     "sqlite3": "^5.0.2",
-    "terminal-kit": "^2.0.7",
     "text2wav": "^0.0.13",
-    "usb-detection": "^4.10.0"
+    "vosk": "^0.3.27"
   },
   "bin": {
     "nowTalkSrv": "./nowTalkSrv.js"

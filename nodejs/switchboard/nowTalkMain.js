@@ -1,14 +1,18 @@
 
+
 /*jshint esversion: 10 */
 "use strict";
 
 const events = require('events');
-const sqlite3 = require('sqlite3');
+const Database = require('better-sqlite3');
 const SerialPort = require('serialport');
 const InterByteTimeout = require('@serialport/parser-inter-byte-timeout');
-const { prompt, confirm } = require('enquirer');
+const got = require('axios');
+const crc16 = require('node-crc16');
 
 const nowTalkUser = require('./nowTalkUser.js');
+const nowTalkHttps = require('./nowTalkHttps.js');
+const { exit } = require('process');
 
 class NowTalkMain extends events.EventEmitter {
     constructor(config) {
@@ -16,7 +20,20 @@ class NowTalkMain extends events.EventEmitter {
         this.config = config;
         this.users = {};
         this.loadDatabase();
-        this.inUse = false;
+        this.newBadgeInUse = false;
+
+        if (typeof config.externelIP === "undefined" || config.externelIP == '' || config.dynamicExtIP == "true") {
+            this.onRequestExternalIP();
+        }
+
+        this.web = new nowTalkHttps(this);
+
+
+
+        if (config.dynamicExtIP === "true") {
+            this.dynamicIpTimer = setInterval(this.onRequestExternalIP, 1000 * 60 * 15);
+        }
+
 
         this.onPortOpened = this.onPortOpened.bind(this);
         this.onParserData = this.onParserData.bind(this);
@@ -26,44 +43,77 @@ class NowTalkMain extends events.EventEmitter {
         this.onHandle_Warning = this.onHandle_Warning.bind(this);
         this.onHandle_Error = this.onHandle_Error.bind(this);
         this.onRequestExternalIP = this.onRequestExternalIP.bind(this);
+    }
 
-        if (config.dynamicExtIP === "true") {
-            this.onRequestExternalIP();
-            this.dynamicIpTimer = setInterval(this.onRequestExternalIP, 1000 * 60 * 15);
+    openDatabase(version = false) {
+        let db = new Database(this.config.database);//, { verbose: console.log }
+        db.exec("CREATE TABLE IF NOT EXISTS users ( mac TEXT NOT NULL UNIQUE,   status INTEGER,   ip TEXT,   name TEXT NOT NULL, key TEXT, PRIMARY KEY(mac))");
+
+        version = db.pragma('user_version', { simple: true });
+
+        switch (version) {
+            case 1:
+                version++;
+
         }
-
+        return db;
     }
 
     loadDatabase() {
-        let db = new sqlite3.Database(this.config.database);
+        let db = this.openDatabase(0);
         let main = this;
-        db.serialize(function () {
-            db.run("CREATE TABLE IF NOT EXISTS users ( mac TEXT NOT NULL UNIQUE,   status INTEGER,   ip TEXT,   name TEXT NOT NULL, key TEXT, PRIMARY KEY(mac))");
-            db.each("SELECT * FROM users where status & " + 0x30 + " !=0 order by status, name", function (err, row) {
-                var _mac = "h" + ("000000000000000" + row.mac.toString(16)).substr(-12);
-                main.users[_mac] = new nowTalkUser(row, main);
-            });
-            db.close();
-        });
+        let stmt = db.prepare("SELECT * FROM users where status & " + 0x30 + " !=0 order by status, name");
+        for (const row of stmt.iterate()) {
+            let _mac = row.mac;
+            row.mac = parseInt(row.mac.substr(1), 16);
+            main.users[_mac] = new nowTalkUser(row, main);
+        }
+        db.close();
     }
 
     update_db(user) {
-        let status = this.status & 0xf0;
-        let db = new sqlite3.Database(this.config.database);
-        db.serialize(function () {
-            if (this.status === 0x00) {
-                db.run("DELETE FROM users WHERE mac = ?", [user.mac]);
-            } else {
-                db.run("INSERT INTO users(mac, status, ip, name) " +
-                    "  VALUES(?, ?, ?, ?)" +
-                    " ON CONFLICT(mac) DO UPDATE SET " +
-                    "status = excluded.status," +
-                    "ip = excluded.ip," +
-                    "name = excluded.name", [user.mac, status, user.ip, user.name]);
-            }
-            db.close();
-        });
+        let status = user.status & 0xf0;
+        let db = this.openDatabase(this.config.database);
+        if (status == 0x00) {
+            db.prepare("DELETE FROM users WHERE mac = ?").run([user._mac]);
+        } else {
+            db.prepare("INSERT INTO users(mac, status, ip, name) " +
+                "  VALUES(?, ?, ?, ?)" +
+                " ON CONFLICT(mac) DO UPDATE SET " +
+                "status = excluded.status," +
+                "ip = excluded.ip," +
+                "name = excluded.name").run(user._mac, status, user.ip, user.name);
+        }
+        db.close();
     }
+
+    makeUser(mac, info = false) {
+        var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
+        var user = this.users[_mac];
+        var isNew = typeof user === "undefined";
+        let main = this;
+
+        if (isNew) {
+            let db = this.openDatabase();
+            let row = db.prepare("SELECT * FROM users where mac = ?").get(_mac);
+            if (typeof row !== "undefined") {
+                user = new nowTalkUser(row, main);
+                isNew = false;
+            }
+
+            db.close();
+        }
+        if (isNew && (info === false || this.config.allowGuests)) {
+            if (info === false) info = {};
+            user = new nowTalkUser({ mac: mac, status: info.status || 0x00, ip: info.ip || "", name: info.name || "" }, main);
+        }
+        if (typeof user !== "undefined") {
+            this.users[_mac] = user;
+            user.start();
+        }
+        return user;
+    }
+
 
     connect() {
         const serialPort = new SerialPort(this.config.commport, { baudRate: this.config.baudrate, autoOpen: false });
@@ -74,13 +124,17 @@ class NowTalkMain extends events.EventEmitter {
         serialPort.on('open', this.onPortOpened);
 
         serialPort.on('close', () => {
-            console.warn("SerialPort closed ... waiting 5 sec.");
+            console.warn("SerialPort closed... waiting 5 sec.");
+            this.web.addMessage('warning', "SerialPort closed... waiting 5 sec.");
+
             this.closeSwitchBoard();
-            return Promise.resolve(true);
+            setTimeout(reconnect, 5000);
         });
 
         serialPort.on('error', () => {
             console.error("SerialPort not found ... waiting 5 sec.");
+            this.web.addMessage('danger', "SerialPort not found ... waiting 5 sec.");
+
             this.closeSwitchBoard();
             setTimeout(reconnect, 5000);
         });
@@ -89,8 +143,8 @@ class NowTalkMain extends events.EventEmitter {
         this.serialPort = serialPort;
     }
 
-   async start() {
-       return Promise.resolve(this.connect());
+    async start() {
+        return Promise.resolve(this.connect());
     }
 
     startSwitchBoard() {
@@ -110,14 +164,10 @@ class NowTalkMain extends events.EventEmitter {
 
     closeSwitchBoard() {
         this.parser.off("data", this.onParserData);
-
-        this.off("handle_h01", this.onHandle_Ping);
-        this.off("handle_h05", this.onHandle_NewDevice);
-
-        this.off("handle_*", this.onHandle_Info);
-
-        this.off("handle_E", this.onHandle_Error);
-        this.off("handle_!", this.onHandle_Warning);
+        this.web.stop();
+        this.eventNames().array.forEach(element => {
+            this.removeAllListeners(element);
+        });
 
         for (const [key, value] of Object.entries(this.users)) {
             value.stop();
@@ -128,6 +178,10 @@ class NowTalkMain extends events.EventEmitter {
     sendMessage(mac, code, data) {
 
         if (typeof data === "undefined") data = "";
+        var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
+
+        let _msg = [_mac, 1 + data.length, 'h' + ("00" + code.toString(16)).substr(-2), data.toString()];
+        this.web.addMessage('send', JSON.stringify(_msg));
 
         var buf = Buffer.alloc(9 + data.length);
         buf.writeUInt8(0x02);
@@ -135,90 +189,39 @@ class NowTalkMain extends events.EventEmitter {
         buf.writeUInt8(data.length + 1, 7);
         buf.writeUInt8(code, 8);
         buf.write(data, 9);
-        console.info('Send:', buf);
         this.serialPort.write(buf);
     }
 
 
     unPeer(mac) {
-        var buf = Buffer.alloc(7);
+        var buf = Buffer.alloc(9);
         buf.writeUInt8(0x03);
-        buf.writeUIntBE(mac, 6, 1);
+        buf.writeUIntBE(mac, 1, 6);
         this.serialPort.write(buf);
         var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
         if (!this.users[_mac].isStatus(0x10)) {
-            this.users[_mac].close();
+            this.users[_mac].stop();
+            this.users[_mac] = null;
             delete this.users[_mac];
         }
     }
 
-    makeUser(mac) {
-        var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
-        var user = this.users[_mac];
-        var isNew = typeof user === "undefined";
-
-        if (isNew) {
-            let db = new sqlite3.Database('nowtalk.sqlite');
-
-            db.serialize(function () {
-                db.each("SELECT * FROM users where mac =" + mac, function (err, row) {
-                    user = new nowTalkUser(row, emitter);
-                    isNew = false;
-                });
-                db.close();
-            });
-        }
-        if (isNew) {
-            user = new nowTalkUser({ mac: mac, status: 0x00, ip: "", name: "", key: "" }, emitter);
-        }
-        this.users[_mac] = user;
-        user.start();
-        return user;
-    }
-
-
-    newUser(user) {
-
-        if (!this.inUse) {
-            this.inUse = true;
-            asyncQuestion().then(alert => {
-                inUse = false;
-                if (alert === false) return;
-                let externIP = '';
-                console.info(alert);
-                user.RegisterBadge(alert, externIP);
-            }).catch(() => {
-                this.inUse = false;
-            });
-        }
-    }
-
     onRequestExternalIP() {
-        try {
-            const response = await got.get('http://api.ipify.org/?format=text');
-            this.config.externelIP = response.data;
-        } catch (error) {
-            console.log(error);
-        }
+        got.get('http://api.ipify.org/?format=text')
+            .then(result => {
+                this.config.externelIP = result.data;
+                this.web.updateConfig();
+            }).catch(error => {
+                console.log(error);
+            });
     }
 
-    checkBadgeID(code) {
-        let baseChars = "0123456789AbCdEfGhIjKlMnOpQrStUvWxYz";
-        const baseCount = baseChars.length + 1;
-        baseChars += "aBcDeFgHiJkLmNoPqRsTuVwXyZ";
-        let length = code.length;
-        var count = 0;
-        var arr = [];
-        if (length != 8) return false;
-        for (let index = 6; index >= 0; index--) {
-            let chr = code.charAt(index);
-            count += baseChars.indexOf(chr);
-            arr.push([count, baseChars.indexOf(chr), chr]);
-        }
-        let crc = count % baseCount, chr = code.charAt(7);
-        return crc === baseChars.indexOf(chr);
+    onUpdateBadeList() {
+        let needUpdate = false;
+        this.users.keys().forEach((key) => {
+            // do something 
+        });
     }
-
 
     onPortOpened() {
         const msg = "***\0";
@@ -228,21 +231,35 @@ class NowTalkMain extends events.EventEmitter {
         const response = function (data) {
             clearTimeout(timer);
             main.parser.off("data", response);
-            if (data.toString() === "#**") {
-                console.info("Bridge is alive: ", data.toString());
+            data = data.toString();
+            if (data.startsWith("#**")) {
+                let bridge = data.split("~");
+                main.config.bridge = { version: "", mac: "", channel: "", bridgeID: "" };
+                if (bridge.length > 4) {
+                    main.config.bridge.version = bridge[1];
+                    main.config.bridge.mac = bridge[2];
+                    main.config.bridge.channel = bridge[3];
+                    main.config.bridge.bridgeID = bridge[4];
+                }
+                console.info("Bridge is alive: ", main.config.bridge);
+                main.web.addMessage('success', "Bridge is alive. ");
+                main.web.updateConfig();
                 main.startSwitchBoard();
             } else {
-                console.info("Bridge is reacted: ", data.toString(), data);
+                console.error("Bridge is rejacted: ", data.toString(), data);
+                main.web.addMessage('danger', "Bridge is rejacted: " + JSON.stringify(data) + data.toString());
 
-                throw "Wrong answer received from the Bridge. " + data.toString() ;
+                //   throw "Wrong answer received from the Bridge. " + data.toString() ;
             }
             return true;
         };
         timer = setTimeout(() => {
             main.parser.off("data", response);
-            console.info("Bridge did not response on time.")
+            let msg = "Bridge did not response on time."
+            this.web.addMessage('danger', msg);
+            console.error(msg);
 
-        }, 500);
+        }, 1500);
         this.parser.on("data", response);
         this.serialPort.write(msg);
     }
@@ -257,16 +274,22 @@ class NowTalkMain extends events.EventEmitter {
             //("000000000000000" + i.toString(16)).substr(-16);
             if (msg.size > 1) {
                 msg.data = data.toString('utf8', 9, 9 + msg.size - 1);
-                msg.arrray = msg.data.split("\0x1f");
+                msg.array = msg.data.split("~");
+            } else {
+                msg.data = "";
+                msg.array = {};
             }
-            console.info('Recv:', [msg._mac, msg.size, msg.code, msg.data]);
-            if (!this.emit("handle_" + msg.code, msg)) {
-                let user = this.users[msg._mac];
-                if (typeof user != 'undefined') {
-                    if (!user.emit("handle_" + msg.code, msg)) {
-                        console.error("User.handle_" + msg.code, msg);
-                    }
-                }
+            this.web.addMessage('recv', JSON.stringify([msg._mac, msg.size, msg.code, msg.data]));
+            let user = this.users[msg._mac];
+            let handled = false;
+            if (typeof user !== 'undefined') {
+                handled = user.emit("handle_" + msg.code, msg);
+            }
+            if (!handled) {
+                handled = this.emit("handle_" + msg.code, msg);
+            }
+            if (!handled) {
+                console.error("handle_" + msg.code + " not handled", msg);
             }
         } else if (data.readUInt8(0) === 0x04) {
             // mac address is removed from peer list;
@@ -279,94 +302,103 @@ class NowTalkMain extends events.EventEmitter {
         }
     }
 
-
     onHandle_Ping(msg) {
-        if (msg.isNew && this.config.allowGuests) {
-            this.makeUser(msg.mac);
+        let user = this.makeUser(msg.mac);
+        if (typeof user !== "undefined") {
+            //   if (user.status === 0x00) user.setStatus(0x02);
+            user.onPingPong(msg);
         }
-        return false;
     }
 
     onHandle_NewDevice(msg) {
-        console.info('NewDevice: ', msg.toString());
-        const prompt = new Confirm({
-            name: 'question',
-            message: 'New Device request. Do you want to add it?'
-            
-        });
 
-        prompt.run()
-            .then(answer => console.log('Answer:', answer));
-        return true;
+        let main = this;
+        let newbadge = {};
+        let onWeb_newBadge;
+        let onNewBadgeTimeout;
+        let onHandle_h10;
+
+        let timer;
+
+        onNewBadgeTimeout = function () {
+            main.off('handle_h10', onHandle_h10);
+            main.off('handle_h11', onNewBadgeTimeout);
+            main.off('web_newBadge', onWeb_newBadge);
+            this.web.addNewBadge(false);
+            main.web.addMessage('success', "Timeout while adding new device.");
+            this.newBadgeInUse = false;
+        };
+
+        onHandle_h10 = function (msg) {
+            clearTimeout(timer);
+            main.off('handle_h10', onHandle_h10);
+            main.off('handle_h11', onNewBadgeTimeout);
+            let user = main.makeUser(msg.mac, newbadge);
+            user.setStatus(0x10);
+            main.web.addMessage('success', "New badge has been added.");
+            return true;
+        };
+
+        onWeb_newBadge = function (body) {
+            timer.refresh();
+            this.off('web_newBadge', onWeb_newBadge);
+            main.off('handle_h10', onHandle_h10);
+            main.off('handle_h11', onNewBadgeTimeout);
+            if (typeof body.badgeid != "undefined" &&
+                typeof body.username != "undefined") {
+                let test = body.badgeid + "~" + this.config.externelIP + "~" +
+                    body.username + "~" + this.config.switchboardName;
+                test += "~" + crc16.checkSum("nowTalkSrv!" + test, 'utf8');
+                newbadge = { mac: msg.mac, ip: this.config.externelIP, name: body.username, key: body.badgeid };
+                main.on("handle_h10", onHandle_h10);
+                main.on('handle_h11', onNewBadgeTimeout);
+                this.sendMessage(msg.mac, 0x07, test);
+                timer.refresh();
+            } else {
+                main.off('handle_h10', onHandle_h10);
+                main.off('handle_h11', onNewBadgeTimeout);
+                main.off('web_newBadge', onWeb_newBadge);
+                clearTimeout(timer);
+                this.newBadgeInUse = false;
+                console.error('Dashboard canceled the request.')
+            }
+        };
+
+        onWeb_newBadge = onWeb_newBadge.bind(main);
+        onHandle_h10 = onHandle_h10.bind(main);
+        onNewBadgeTimeout = onNewBadgeTimeout.bind(main);
+
+        if (!this.newBadgeInUse) {
+            this.newBadgeInUse = true;
+            this.update_db({ mac: msg.mac, status: 0x00 });
+            if (this.web.addNewBadge(true)) {
+                timer = setTimeout(onNewBadgeTimeout, 90000);
+                this.on('web_newBadge', onWeb_newBadge);
+            } else {
+                console.error('No dashboard is open atm.')
+                this.newBadgeInUse = false;
+            }
+        }
     }
 
-
     onHandle_Info(msg) {
+        this.web.addMessage('info', msg.toString());
         console.info('Info: ', msg.toString());
         return true;
     }
 
     onHandle_Error(msg) {
+        this.web.addMessage('danger', msg.toString());
         console.error('Error: ', msg.toString());
         return true;
     }
 
     onHandle_Warning(msg) {
+        this.web.addMessage('warning', msg.toString());
         console.warn('Warning: ', msg.toString());
         return true;
     }
 
 
-    /*
-    term.on('key', function (key, x, y, z) {
-        switch (key) {
-            case 'CTRL_C':
-                terminate();
-                break;
-        }
-    });
-    
-    async function asyncQuestion() {
-        term.grabInput(false);
-        term.grabInput();
-        try {
-            term.green("A new commBadge has requested to join this switchboard !\n");
-            term('Do you want to add this new device now? [ Y | n] :');
-    
-            if (! await term.yesOrNo({ yes: ['y', 'ENTER', 'j', 'J', 'Y'], no: ['n', 'ESCAPE'] }).promise) {
-                term.red("No\n\n");
-                return false;
-            }
-    
-            term.green("Yes\n\nTo continue you need the commBadge ID code shown on the display !\n");
-            term.green("NOTE: this code is case sensitive and exist of 8 digids.\n");
-            term.green("To stop: Leave the code below blank.  \n");
-            var input1 = '';
-            while (true) {
-                term('Enter the given commBadge ID here : ');
-    
-                input1 = await term.inputField({ cancelable: true }).promise;
-                if (typeof input1 === "undefined" || (input1.trim() === "")) return false;
-                let valid = await checkBadgeID(input1.trim());
-                if (valid) break;
-                term.red("\nThe given badge ID is not a valid one. try again.\n\n");
-            }
-    
-            term.green("\n\nEnter now the call name of the the badge user .  \n");
-            term.green("This will be used when someone call's hem uaing there own badge.  \n");
-            term.green("To stop: Leave the name  below blank.  \n");
-    
-            term('Enter username of this badge : ');
-            var input2 = await term.inputField({ cancelable: true }).promise;
-            if (typeof input1 === "undefined" || input2.trim() === "") return false;
-    
-            return [input1, input2];
-        } finally {
-            term.yellow("\n\nAll done, thanks. The badge will now be initialisated with the above info.  \n");
-            term.grabInput(false);
-        }
-    
-    }
-    */
 }
 module.exports = NowTalkMain;
