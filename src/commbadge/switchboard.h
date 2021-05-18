@@ -61,25 +61,22 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char *info,
             String name = getValue(split, '~', 2);
             String network = getValue(split, '~', 3);
      //       uint16_t crc = getValue(split, '~', 4).toInt();
-            test = "nowTalkSrv!"+checkID + "~" + IP + "~" + name+ "~" + network;
-//            uint16_t checkCrc crc16((uint8_t *)test.c_str(), test.length, 0x1021, 0, 0, false, false);
+            test = "nowTalkSrv!" + checkID + "~" + IP + "~" + name + "~" + network;
+            //            uint16_t checkCrc crc16((uint8_t *)test.c_str(), test.length, 0x1021, 0, 0, false, false);
             if (checkID == badgeID())
             {                                                                  //crc == checkCrc &&
                 strlcpy(config.masterIP, IP.c_str(), sizeof(config.masterIP)); // <- destination's capacity
                 strlcpy(config.userName,name.c_str(), sizeof(config.userName)); // <- destination's capacity
                 strlcpy(config.hostname, network.c_str(), sizeof(config.hostname)); // <- destination's capacity
                 memcpy(config.masterAddress, mac, 6);
+                saveConfiguration();
                 send_message(mac, ESPTALK_CLIENT_ACK, "");
+                config.registrationMode = false;
                 return;
-            }
-            else
-            {
+            }else {
                 send_message(mac, ESPTALK_CLIENT_NACK, "");
+                message("Wrong Badge Id!\nPress Enter Button.");
             }
-        }
-        else
-        {
-            send_message(mac, ESPTALK_CLIENT_NACK, "");
         }
         esp_now_del_peer(mac);
     }

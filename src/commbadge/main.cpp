@@ -85,7 +85,7 @@ void handleCommand()
         Serial.print('~');
         Serial.print(config.userName);
         Serial.print('~');
-        Serial.println(VERSION);
+        Serial.println(VERSION,3);
     }
     else
     {
@@ -177,6 +177,9 @@ void setup()
 
     btn1.setClickHandler(RegisterBadge);
     btn2.setClickHandler(RegisterBadge);
+    if (config.registrationMode) {
+        message("New Badge!\nPress Enter Button.");
+    }
 }
 
 void button_loop()

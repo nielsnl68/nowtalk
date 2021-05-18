@@ -8,7 +8,7 @@
 #include <ArduinoJson.h>
 
 
-#define VERSION 32.234
+#define VERSION 32.245
 
 struct config_t
 {
@@ -112,21 +112,13 @@ int vref = 1100;
 
 #define ESPTALK_CLIENT_HELPSOS 0xff
 
-#define ESPTALK_FINDPEER_NOTFOUND 0x00
-#define ESPTALK_FINDPEER_BLOCKED 0x01
-#define ESPTALK_FINDPEER_GUEST 0x02
-#define ESPTALK_FINDPEER_FOUND 0x03
-
 #define ESPTALK_PEER_MEMBER 0x10
 #define ESPTALK_PEER_FRIEND 0x20
-#define ESPTALK_PEER_BLOCKED 0x40
+#define ESPTALK_PEER_BLOCKED 0x80
 
-#define ESPTALK_STATUS_ALIVE 0x01
-#define ESPTALK_STATUS_EXTERN 0x02
-#define ESPTALK_STATUS_NEW 0x04
 #define ESPTALK_STATUS_GONE 0x00
-
-
+#define ESPTALK_STATUS_ALIVE 0x01
+#define ESPTALK_STATUS_GUEST 0x02
 
 // load configuration from a file
 void loadConfiguration(bool clear = false)
