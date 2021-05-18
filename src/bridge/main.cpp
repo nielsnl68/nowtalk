@@ -8,11 +8,33 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 
-#define VERSION 2.25
+#define VERSION 2.251
 #define FORMAT_SPIFFS_IF_FAILED true
 
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t channel = 0;
+
+String badgeID()
+{
+    static char baseChars[] = "0123456789AbCdEfGhIjKlMnOpQrStUvWxYz"; //aBcDeFgHiJkLmNoPqRsTuVwXyZ
+    uint8_t base = sizeof(baseChars);
+    String result = "";
+    uint32_t chipId = 0xa5000000;
+    uint8_t crc = 0;
+
+    for (int i = 0; i < 17; i = i + 8)
+    {
+        chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
+    }
+
+    do
+    {
+        result = String(baseChars[chipId % base]) + result; // Add on the left
+        crc += chipId % base;
+        chipId /= base;
+    } while (chipId != 0);
+    return result + String(baseChars[crc % base]);
+}
 
 void OnDataSent(const uint8_t *mac, esp_now_send_status_t sendStatus)
 {
@@ -98,6 +120,14 @@ void serialEvent()
             String x = Serial.readStringUntil((char)0x00);
             Serial.write('#');
             Serial.write(x.c_str());
+            Serial.write('~');
+            Serial.print(VERSION, 3);
+            Serial.write('~');
+            Serial.print(WiFi.macAddress());
+            Serial.write('~');
+            Serial.print(WiFi.channel());
+            Serial.write('~');
+            Serial.print(badgeID());
         }
         else if (inChar == 0x02)
         {
