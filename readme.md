@@ -1,6 +1,5 @@
-# espnow-commbadge
+# nowTalk - An intercom system over ESP-NOW
 This would be my approach of building a commbadge system. using esp32 and some i2s modules. 
-
 
 ## Insperation
 Inspire by @atomic14 i started to build my own version of your walkytalky concept. I always love to build a commbadge like in startrek/B5 etc. 
