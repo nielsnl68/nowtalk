@@ -78,7 +78,7 @@ void add_peer(const uint8_t *mac)
 
 void setup()
 {
-    Serial.begin(115200);
+    Serial.begin(921600);
     Serial.setDebugOutput(true);
     Serial.print(F(" NowTalk Server Version:"));
     Serial.println(VERSION, 3);

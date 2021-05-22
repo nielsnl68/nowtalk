@@ -1,0 +1,212 @@
+<!DOCTYPE HTML>
+<html lang="en">
+
+<head>
+    <title>NowTalk Switchboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.3/css/all.css">
+    <meta charset="utf-8">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css"
+        integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
+    <style>
+        .reading {
+            font-size: 2.8rem;
+        }
+
+        .packet {
+            color: #bebebe;
+        }
+
+        .card.temperature {
+            color: #fd7e14;
+        }
+
+        .card.humidity {
+            color: #1b78e2;
+        }
+
+        .scrolltabletable {
+            display: block;
+            height: 363px;
+            overflow-y: scroll;
+        }
+
+        .scrolltable {
+            display: block;
+            height: 400px;
+            overflow-y: scroll;
+        }
+    </style>
+</head>
+
+<body class="alert-primary ">
+    <nav class="navbar navbar-dark bg-primary py-1">
+        <div class="container-fluid">
+            <span class="navbar-brand  mr-auto py-0  ">NowTalk - <span id="sts_switchboardName" class="text-info">Name
+                    unknown</span></span>
+
+
+            <div class="nav-item btn-group">
+
+                <button id="btnStatusinfo" type="button" class="btn btn-primary btn-sm dropdown-toggle"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                    Status
+                </button>
+                <div class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="btnStatusinfo">
+
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Version <small
+                            id="sts_version"></small></div>
+                    <div class="dropdown-divider  py-1"></div>
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Externel IP <small
+                            id="sts_externIP"></small></div>
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Mac address <small
+                            id="sts_mac"></small></div>
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Channel <small
+                            id="sts_channel"></small></div>
+                    <div class="dropdown-item d-flex justify-content-between  px-2">Bridge ID <small
+                            id="sts_bridgeid"></small></div>
+                </div>
+            </div>
+        </div>
+
+    </nav>
+    <main role="main" class="container" id="main">
+
+        <div class="album mt-5 ">
+            <div class="container">
+
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card mb-4 humidity shadow-sm">
+                            <div class="card-header">
+                                <i class="fas fa-tint"></i> Active badges
+                            </div>
+                            <div class="card-body p-0 ">
+                                <table class="table table-sm mb-0 ">
+                                    <colgroup>
+                                        <col style="width:70px">
+                                        <col style="width:130px">
+                                        <col style="width:200px">
+                                        <col style="width:150px">
+                                    </colgroup>
+
+                                    <thead class="table-secondary">
+                                        <tr>
+                                            <th>Status</th>
+                                            <th>Node</th>
+                                            <th>Name</th>
+                                            <th>Externel IP</th>
+                                            <th>Activity</th>
+                                        </tr>
+                                    </thead>
+                                </table>
+                                <div class="scrolltabletable">
+                                    <table class="table table-sm table-hover table-striped"
+                                        style="table-layout: fixed;">
+                                        <colgroup>
+                                            <col style="width:70px">
+                                            <col style="width:130px">
+                                            <col style="width:200px">
+                                            <col style="width:150px">
+                                        </colgroup>
+                                        <tbody id="listBadges">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="col-md-4">
+                        <div class="card mb-4 temperature shadow-sm">
+                            <div class="card-header">
+                                <i class="fas fa-comments"></i> Messages
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="container-fluid scrolltable pb-1" id="msgBody">
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="editBadgeAlert" class=" py-1 mb-0  alert alert-info alert-dismissible fade show fixed-bottom"
+            role="alert">
+            <div class="d-grid gap-2 d-md-block">
+                <button id="changeDisable" data-action='disable' class="btn btn-primary btn-sm toggleButton"
+                    type="button">Disable badge</button>
+                <button id="changeFriend" data-action='friend' class="btn btn-primary btn-sm toggleButton"
+                    type="button">Make friend</button>
+                    <button id="changeName" data-action='name' class="btn btn-primary btn-sm"
+                        type="button" id="dropdownMenuClickable" data-bs-toggle="dropdown" data-bs-auto-close="false"
+                        aria-expanded="false">
+                        Edit username
+                    </button>
+
+                <form class="dropdown-menu px-2 " aria-labelledby="changeName">
+                    <div class="row g-3  align-items-center">
+                        <div class="col-9">
+                            <input type="input" id="editUsername" class="form-control form-control-sm"
+                                placeholder="Username" required>
+                        </div>
+                        <div class="col-3">
+                            <button id="editbadgeSave" type="submit" class="btn btn-light btn-sm"
+                                aria-label="Close">Okey</button>
+                        </div>
+                    </div>
+
+                </form>
+
+            </div>
+            <button id="editbadgeClose" type="button" class="btn-close btn-sm pt-1" aria-label="Close"></button>
+        </div>
+        <div id="newBadgeAlert" class="py-1 mb-0 alert alert-warning alert-dismissible fade show fixed-bottom"
+            role="alert">
+            <span id="newBadgeConfirm">
+                <strong>Hello!</strong> Did you just requested to add a new commbadge to this switchboard?
+                <button class="ms-3 btn btn-warning btn-sm" type="button" id="newbadgeYes"
+                    data-bs-target="#newBadgeForm" aria-expanded="false" aria-controls="newBadgeForm">Yes</button>
+            </span>
+            <button id="newbadgeClose" type="button" class="btn-close pt-1" aria-label="Close"></button>
+            <form class="my-0 needs-validation" id="newBadgeForm">
+                <div class="row   align-items-center">
+                    <div class="col-md-1"></div>
+                    <div class="col-md-3">
+                        <label for="badgeid" class="form-label">Badge Id code:</label>
+                        <input type="input" id="badgeid" class="form-control form-control-sm"
+                            aria-describedby="badgeidhelp" minlength="8" maxlength="8" required>
+                        <span id="badgeidhelp" class="form-text">
+                            Must be 8 characters long.
+                        </span>
+                    </div>
+                    <div class="col-md-5">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="input" id="username" class="form-control form-control-sm"
+                            aria-describedby="usernameHelpInline" required>
+                        <span id="usernameHelpInline" class="form-text">
+                            You can choose any name. But make sure you can speak it easly.
+                        </span>
+                    </div>
+                    <div class="col-2">
+                        <button id="newbadgeAdd" type="submit" class="btn btn-light btn-sm"
+                            aria-label="Close">Register</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </main><!-- /.container -->
+    <script src="https://code.jquery.com/jquery-3.6.0.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-gtEjrD/SeCtmISkJkNUaaKMoLD0//ElJ19smozuHV6z3Iehds+3Ulb9Bn9Plx0x4" crossorigin="anonymous">
+        </script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/client.js"></script>
+
+</body>
+
+</html>

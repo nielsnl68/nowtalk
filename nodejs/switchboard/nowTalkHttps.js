@@ -6,6 +6,13 @@ const http = require("http");
 const fsx = require('fs');
 const { parse } = require('querystring');
 const process = require('process');
+const socketio = require('socket.io');
+
+const {
+    userJoin,
+    userLeave,
+    userCount
+} = require('./utils/users');
 
 const MAX_MSGS = 100;
 
@@ -20,17 +27,41 @@ class NowTalkHttps {
         this.timer = false;
         this.onUpdateBadges = this.onUpdateBadges.bind(this);
         this.requestListener = this.requestListener.bind(this);
+
         this.server = http.createServer(this.requestListener);
-        //   this.clientJs = fs.readFileSync("./webpages/dashboard.js")
+        this.io = socketio(this.server);
+
+        this.io.on('connection', socket => {
+            const user = userJoin(socket.id, 'username', 'room');
+            // handle newBadge return
+            socket.on("newBadge", data => {
+                console.warn('socket_newBadge', data);
+                if (typeof data === "boolean") {
+                    socket.broadcast.emit("newBadge", false);
+                }
+                this.main.emit("web_newBadge", data);
+            });
+
+            // Runs when client disconnects
+            socket.on('disconnect', () => {
+                const user = userLeave(socket.id);
+            });
+
+            socket.emit('config', this.config);
+            socket.emit('msgs', this.msgs);
+            this.onUpdateBadges(socket);
+        });
 
         if (main.config.webAddress === "*") {
             this.server.listen(main.config.webPort);
         } else {
             this.server.listen(main.config.webPort, main.config.webAddress);
         }
+        this.timer = setInterval(this.onUpdateBadges, 2500, this.io);
     }
 
     stop() {
+        clearInterval(this.timer);
         this.clients.forEach(connection => {
             if (!connection) return;
             connection.end();
@@ -40,39 +71,35 @@ class NowTalkHttps {
 
     requestListener(req, res) {
         //     res.setHeader('Access-Control-Allow-Origin', this.config.sitebaseURL);
-        res.setHeader('Access-Control-Request-Method', 'POST,GET');
-        res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST,GET');
+        res.setHeader('Access-Control-Request-Method', 'GET');
+        //        res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST,GET');
         res.setHeader('Access-Control-Allow-Headers', '*');
-        if (req.method === 'OPTIONS') return res.end();
-        if (req.method === 'POST' && req.url === '/p') {
-
-            var body = "", http = this;
-            req.on("data", function (chunk) {
-                body += chunk;
-            });
-
-            req.on("end", function () {
-                http.postRequest(req, res, parse(body));
-                res.end('ok');
-            });
-        }
-        /*        
-                if (req.method === 'GET' && req.url === '/client.js') {
-                    res.setHeader('Content-type', 'text/javascript');
-                    return res.end(this.client_js);
+        /*         if (req.method === 'OPTIONS') return res.end();
+                if (req.method === 'POST' && req.url === '/p') {
+        
+                    var body = "", http = this;
+                    req.on("data", function (chunk) {
+                        body += chunk;
+                    });
+        
+                    req.on("end", function () {
+                        http.postRequest(req, res, parse(body));
+                        res.end('ok');
+                    });
                 }
-        */
-        if (req.headers.accept && req.headers.accept.indexOf('text/event-stream') >= 0) {
-            this.handleSSE(res);
-            return this.populateNewClient(res);
+         */
+        if (req.method === 'GET' && req.url === '/client.js') {
+            res.setHeader('Content-type', 'text/javascript');
+            res.writeHead(200);
+            return res.end(fsx.readFileSync("./webpages/client.js"));
         }
         switch (req.url) {
             case "":
             case "/":
                 res.setHeader("Content-Type", "text/html");
                 res.writeHead(200);
-                this.indexFile = fsx.readFileSync("./webpages/dashboard.html");
-                res.end(this.indexFile);
+                //       this.indexFile =;
+                res.end(fsx.readFileSync("./webpages/index.html"));
                 break;
             default:
                 res.writeHead(404);
@@ -80,78 +107,32 @@ class NowTalkHttps {
         }
     }
 
-    handleSSE(res) {
-        res.localRef = new Date().toISOString();
-        this.clients.push(res);
-        res.on('close', () => {
-            this.clients.splice(this.clients.findIndex(c => res === c), 1);
-            if ((this.clients.length == 0) && this.timer !== false) {
-                clearInterval(this.timer);
-                this.timer = false;
-            }
-        });
-        res.writeHead(200, {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive'
-        });
-        if (this.timer === false) {
-            this.timer = setInterval(this.onUpdateBadges, 2500);
-        }
-
-    }
-
-    sendSSE(data, connections = false) {
-        if (connections === false) {
-            connections = this.clients;
-        }
-        connections.forEach(connection => {
-            if (!connection) return;
-            const id = new Date().toISOString();
-            connection.write('id: ' + id + '\n')
-            connection.write('data: ' + data + '\n\n')
-        });
-        return connections.length !== 0;
-    }
-
     updateConfig(connections = false) {
-        return this.sendSSE(JSON.stringify(['config', this.config]), connections);
+        this.io.emit('config',  this.config);
     }
 
     addNewBadge(data) {
-        return this.sendSSE(JSON.stringify(['newbadge', data]), false);
+        this.io.emit('newBadge', data);
+        return userCount() !== 0;
     }
 
     addMessage(kind, msg) {
-        if (this.msgs.length > MAX_MSGS) {
+        while (this.msgs.length > MAX_MSGS) {
             this.msgs.shift();
         }
         this.msgs.push([kind, msg]);
-        return this.sendSSE(JSON.stringify(['msg', kind, msg]), false);
+        this.io.emit('msg', kind, msg);
     }
 
-    populateNewClient(res) {
-        this.updateConfig([res]);
-        this.sendSSE(JSON.stringify(['msgs', this.msgs]), false);
-        this.onUpdateBadges();
-    }
-
-    postRequest(req, res, body) {
-        if (typeof body.action != "undefined") {
-            this.main.emit("web_" + body.action, body);
-        }
-    }
-
-    onUpdateBadges() {
+    onUpdateBadges(socket) {
         let list = [];
 
         for (const [key, value] of Object.entries(this.main.users)) {
             list.push(value.info(true));
         }
-        return this.sendSSE(JSON.stringify(['update', list, process.hrtime.bigint().toString()]), false);
+        socket.emit('update', list, process.hrtime.bigint().toString());
     }
 
 }
-
 
 module.exports = NowTalkHttps;

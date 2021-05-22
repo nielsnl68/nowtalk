@@ -31,7 +31,7 @@ const config = {
     webAddress: "*",//127.0.0.1
     webPort: 1215,
     allowNewDevice: true,
-    badgeTimeout: 90
+    badgeTimeout: 60
 };
 
 const makeNumber = input => Number(input);

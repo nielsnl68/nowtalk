@@ -26,11 +26,13 @@
 
 #define BUTTON_1 35
 #define BUTTON_2 13
+#define BUTTON_3  0
 
  TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom library
 
 Button2 btn1(BUTTON_1);
 Button2 btn2(BUTTON_2);
+Button2 btn3(BUTTON_3);
 
 // Callback when data is sent
 void OnDataSent(const uint8_t *mac, esp_now_send_status_t sendStatus)
@@ -111,8 +113,12 @@ void serialEvent()
         }
     }
 }
+void ClearBadge(Button2& b) {    
+    loadConfiguration(true);
+    ESP.restart();
+}
 
-void RegisterBadge(Button2 &b)
+void RegisterBadge(Button2& b)
 {
     if (config.registrationMode)
     {
@@ -177,6 +183,8 @@ void setup()
 
     btn1.setClickHandler(RegisterBadge);
     btn2.setClickHandler(RegisterBadge);
+     btn3.setTripleClickHandler(ClearBadge);
+
     if (config.registrationMode) {
         message("New Badge!\nPress Enter Button.");
     }

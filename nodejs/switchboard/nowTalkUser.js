@@ -59,7 +59,7 @@ class NowTalkUser extends events.EventEmitter {
         this.ip = userInfo.ip;
         this.name = userInfo.name;
         this.key = userInfo.key||"";
-        this.timestamp = process.hrtime.bigint();
+        this.timestamp = 0n; // process.hrtime.bigint();
         this.externelIP = "";
         this.realName = "";
         this.lastMessage = null;
@@ -229,7 +229,6 @@ class NowTalkUser extends events.EventEmitter {
             this.sendMessage(0x08);
             this.main.unPeer(msg.mac);
         } else {
-            console.info(msg);
             this.ip = msg.array[0];
             if (!this.name) this.name = msg.array[1];
             this.realname = msg.array[1];

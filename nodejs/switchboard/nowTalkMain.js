@@ -14,6 +14,10 @@ const nowTalkUser = require('./nowTalkUser.js');
 const nowTalkHttps = require('./nowTalkHttps.js');
 const { exit } = require('process');
 
+const ignoreCodes = [0x01, 0x02];
+
+
+
 class NowTalkMain extends events.EventEmitter {
     constructor(config) {
         super();
@@ -165,7 +169,7 @@ class NowTalkMain extends events.EventEmitter {
     closeSwitchBoard() {
         this.parser.off("data", this.onParserData);
         this.web.stop();
-        this.eventNames().array.forEach(element => {
+        this.eventNames().forEach(element => {
             this.removeAllListeners(element);
         });
 
@@ -181,7 +185,9 @@ class NowTalkMain extends events.EventEmitter {
         var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
 
         let _msg = [_mac, 1 + data.length, 'h' + ("00" + code.toString(16)).substr(-2), data.toString()];
-        this.web.addMessage('send', JSON.stringify(_msg));
+        if (ignoreCodes.indexOf(code) === -1) {
+            this.web.addMessage('send', JSON.stringify(_msg));
+        }
 
         var buf = Buffer.alloc(9 + data.length);
         buf.writeUInt8(0x02);
@@ -241,7 +247,6 @@ class NowTalkMain extends events.EventEmitter {
                     main.config.bridge.channel = bridge[3];
                     main.config.bridge.bridgeID = bridge[4];
                 }
-                console.info("Bridge is alive: ", main.config.bridge);
                 main.web.addMessage('success', "Bridge is alive. ");
                 main.web.updateConfig();
                 main.startSwitchBoard();
@@ -279,7 +284,9 @@ class NowTalkMain extends events.EventEmitter {
                 msg.data = "";
                 msg.array = {};
             }
-            this.web.addMessage('recv', JSON.stringify([msg._mac, msg.size, msg.code, msg.data]));
+            if (ignoreCodes.indexOf(data.readUInt8(8)) === -1) {
+                this.web.addMessage('recv', JSON.stringify([msg._mac, msg.size, msg.code, msg.data]));
+            }
             let user = this.users[msg._mac];
             let handled = false;
             if (typeof user !== 'undefined') {
@@ -334,13 +341,15 @@ class NowTalkMain extends events.EventEmitter {
             main.off('handle_h10', onHandle_h10);
             main.off('handle_h11', onNewBadgeTimeout);
             let user = main.makeUser(msg.mac, newbadge);
-            user.setStatus(0x10);
+            user.setStatus(0x10); user.setStatus(0x01);
+            user.updateTimer();
             main.web.addMessage('success', "New badge has been added.");
             return true;
         };
 
         onWeb_newBadge = function (body) {
             timer.refresh();
+            console.info(body);
             this.off('web_newBadge', onWeb_newBadge);
             main.off('handle_h10', onHandle_h10);
             main.off('handle_h11', onNewBadgeTimeout);
@@ -354,13 +363,15 @@ class NowTalkMain extends events.EventEmitter {
                 main.on('handle_h11', onNewBadgeTimeout);
                 this.sendMessage(msg.mac, 0x07, test);
                 timer.refresh();
-            } else {
-                main.off('handle_h10', onHandle_h10);
-                main.off('handle_h11', onNewBadgeTimeout);
-                main.off('web_newBadge', onWeb_newBadge);
+            } else if ((typeof body === "boolean") && (body === false)) {
                 clearTimeout(timer);
                 this.newBadgeInUse = false;
                 console.error('Dashboard canceled the request.')
+            } else {
+                timer.refresh();
+                main.on("handle_h10", onHandle_h10);
+                main.on('handle_h11', onNewBadgeTimeout);
+                main.on('web_newBadge', onWeb_newBadge);
             }
         };
 

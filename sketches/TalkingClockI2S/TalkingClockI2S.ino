@@ -171,7 +171,7 @@ void setup()
   }
   Serial.printf("OK\n");
   ac.SetVolumeSpeaker(volume);
-  ac.SetVolumeHeadphone(volume);
+//  ac.SetVolumeHeadphone(volume);
 //  ac.DumpRegisters();
   
   WiFi.begin(ssid, pass);

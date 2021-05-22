@@ -81,32 +81,35 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char *info,
         esp_now_del_peer(mac);
     }
     break;
-
-    /*
     case ESPTALK_SERVER_NEW_IP:
     {
-        test = split.substring(0, split.indexOf(" "));
-        if (strcmp(config.masterIP, split.c_str()) == 0)
+        String OldIP = getValue(split, '~', 0);
+        String NewIP = getValue(split, '~', 1);
+        if (strcmp(config.masterIP, OldIP.c_str()) == 0)
         {
-            strlcpy(config.masterIP, split.substring(split.indexOf(" ") + 1).c_str(), sizeof(config.masterIP)); // <- destination's capacity
+            strlcpy(config.masterIP, NewIP.c_str(), sizeof(config.masterIP)); // <- destination's capacity
 
-            send_message(mac, ESPTALK_CLIENT_ACK, "IP");
+            send_message(mac, ESPTALK_CLIENT_ACK, "");
             message("* Update IP to " + String(config.masterIP));
+        } else {
+            send_message(mac, ESPTALK_CLIENT_NACK, "");
         }
     }
     break;
     case ESPTALK_SERVER_NEW_NAME:
     {
-        test = split.substring(0, split.indexOf(" "));
-        if (strcmp(config.userName, split.c_str()) == 0)
+        String OldName = getValue(split, '~', 0);
+        String NewName = getValue(split, '~', 1);
+        if (strcmp(config.userName, OldName.c_str()) == 0)
         {
-            strlcpy(config.userName, split.substring(split.indexOf(" ") + 1).c_str(), sizeof(config.userName)); // <- destination's capacity
-            send_message(mac, 0x06, "Name");
+            strlcpy(config.userName, NewName.c_str(), sizeof(config.userName)); // <- destination's capacity
+            send_message(mac, ESPTALK_CLIENT_ACK, "");
             message("* Update Name to " + String(config.userName));
+        }  else {
+            send_message(mac, ESPTALK_CLIENT_NACK, "");
         }
     }
     break;
-    */
     default:
 
         char msg[254];
