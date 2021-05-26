@@ -4,3 +4,4 @@
 .vscode/launch.json
 .vscode/ipch
 nodejs/switchboard/node_modules
+nodejs/switchboard/nowTalk.sqlite

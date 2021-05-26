@@ -11,37 +11,19 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css"
         integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
     <style>
-        .reading {
-            font-size: 2.8rem;
-        }
-
-        .packet {
-            color: #bebebe;
-        }
-
-        .card.temperature {
-            color: #fd7e14;
-        }
-
-        .card.humidity {
-            color: #1b78e2;
-        }
-
-        .scrolltabletable {
-            display: block;
-            height: 363px;
-            overflow-y: scroll;
-        }
-
         .scrolltable {
-            display: block;
-            height: 400px;
+            height: 100%;
             overflow-y: scroll;
+        }
+
+        .relativeCard {
+            min-height: calc(100vh - 8rem);
+            height: calc(100vh - 8rem);
         }
     </style>
 </head>
 
-<body class="alert-primary ">
+<body class="alert-primary " style="height:100vh">
     <nav class="navbar navbar-dark bg-primary py-1">
         <div class="container-fluid">
             <span class="navbar-brand  mr-auto py-0  ">NowTalk - <span id="sts_switchboardName" class="text-info">Name
@@ -72,99 +54,58 @@
         </div>
 
     </nav>
-    <main role="main" class="container" id="main">
-
-        <div class="album mt-5 ">
-            <div class="container">
-
-                <div class="row">
-                    <div class="col-md-8">
-                        <div class="card mb-4 humidity shadow-sm">
-                            <div class="card-header">
-                                <i class="fas fa-tint"></i> Active badges
-                            </div>
-                            <div class="card-body p-0 ">
-                                <table class="table table-sm mb-0 ">
-                                    <colgroup>
-                                        <col style="width:70px">
-                                        <col style="width:130px">
-                                        <col style="width:200px">
-                                        <col style="width:150px">
-                                    </colgroup>
-
-                                    <thead class="table-secondary">
-                                        <tr>
-                                            <th>Status</th>
-                                            <th>Node</th>
-                                            <th>Name</th>
-                                            <th>Externel IP</th>
-                                            <th>Activity</th>
-                                        </tr>
-                                    </thead>
-                                </table>
-                                <div class="scrolltabletable">
-                                    <table class="table table-sm table-hover table-striped"
-                                        style="table-layout: fixed;">
-                                        <colgroup>
-                                            <col style="width:70px">
-                                            <col style="width:130px">
-                                            <col style="width:200px">
-                                            <col style="width:150px">
-                                        </colgroup>
-                                        <tbody id="listBadges">
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
+    <main role="main" class="container-fluid container-lg" id="main">
+        <div class="row mt-3">
+            <div class="col-8">
+                <div class="card shadow-sm  relativeCard">
+                    <div class="card-header">
+                        <i class="fas fa-tint"></i> Active badges
                     </div>
+                    <div class="card-body p-0 ">
+                        <table class="table table-sm mb-0 table-bordered ">
+                            <colgroup>
+                                <col style="width:160px">
+                                <col style="width:200px">
+                                <col style="width:200px">
+                                <col>
+                            </colgroup>
 
+                            <thead class="table-secondary">
+                                <tr>
+                                    <th>Badge </th>
+                                    <th>Name</th>
+                                    <th>Externel IP</th>
+                                    <th>Activity</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                    <div class="card-body p-0 scrolltable">
+                        <table class="table table-sm table-hover table-striped table-bordered"
+                            style="table-layout: fixed; width:100%">
+                            <colgroup>
+                                <col style="width:30px">
+                                <col style="width:130px">
+                                <col style="width:200px">
+                                <col style="width:200px">
+                                <col>
+                            </colgroup>
+                            <tbody id="listBadges"></tbody>
+                        </table>
 
-                    <div class="col-md-4">
-                        <div class="card mb-4 temperature shadow-sm">
-                            <div class="card-header">
-                                <i class="fas fa-comments"></i> Messages
-                            </div>
-                            <div class="card-body p-0">
-                                <div class="container-fluid scrolltable pb-1" id="msgBody">
-
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <div id="editBadgeAlert" class=" py-1 mb-0  alert alert-info alert-dismissible fade show fixed-bottom"
-            role="alert">
-            <div class="d-grid gap-2 d-md-block">
-                <button id="changeDisable" data-action='disable' class="btn btn-primary btn-sm toggleButton"
-                    type="button">Disable badge</button>
-                <button id="changeFriend" data-action='friend' class="btn btn-primary btn-sm toggleButton"
-                    type="button">Make friend</button>
-                    <button id="changeName" data-action='name' class="btn btn-primary btn-sm"
-                        type="button" id="dropdownMenuClickable" data-bs-toggle="dropdown" data-bs-auto-close="false"
-                        aria-expanded="false">
-                        Edit username
-                    </button>
-
-                <form class="dropdown-menu px-2 " aria-labelledby="changeName">
-                    <div class="row g-3  align-items-center">
-                        <div class="col-9">
-                            <input type="input" id="editUsername" class="form-control form-control-sm"
-                                placeholder="Username" required>
-                        </div>
-                        <div class="col-3">
-                            <button id="editbadgeSave" type="submit" class="btn btn-light btn-sm"
-                                aria-label="Close">Okey</button>
-                        </div>
+            <div class="col-4">
+                <div class="card shadow-sm relativeCard">
+                    <div class="card-header">
+                        <i class="fas fa-comments"></i> Messages
                     </div>
-
-                </form>
-
+                    <div class="card-body scrolltable py-1" id="msgBody"></div>
+                </div>
             </div>
-            <button id="editbadgeClose" type="button" class="btn-close btn-sm pt-1" aria-label="Close"></button>
         </div>
+
         <div id="newBadgeAlert" class="py-1 mb-0 alert alert-warning alert-dismissible fade show fixed-bottom"
             role="alert">
             <span id="newBadgeConfirm">

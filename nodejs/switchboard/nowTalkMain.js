@@ -23,7 +23,7 @@ class NowTalkMain extends events.EventEmitter {
         super();
         this.config = config;
         this.users = {};
-        this.loadDatabase();
+        this.loadBadges();
         this.newBadgeInUse = false;
 
         if (typeof config.externelIP === "undefined" || config.externelIP == '' || config.dynamicExtIP == "true") {
@@ -47,7 +47,45 @@ class NowTalkMain extends events.EventEmitter {
         this.onHandle_Warning = this.onHandle_Warning.bind(this);
         this.onHandle_Error = this.onHandle_Error.bind(this);
         this.onRequestExternalIP = this.onRequestExternalIP.bind(this);
+        this.onWeb_editBadge = this.onWeb_editBadge.bind(this);
+
     }
+
+
+    async start() {
+        return Promise.resolve(this.connect());
+    }
+
+    startSwitchBoard() {
+        this.parser.on("data", this.onParserData);
+
+        this.on("handle_h01", this.onHandle_Ping);
+        this.on("handle_h05", this.onHandle_NewDevice);
+
+        this.on("handle_*", this.onHandle_Info);
+
+        this.on("handle_E", this.onHandle_Error);
+        this.on("handle_!", this.onHandle_Warning);
+
+        this.on('web_editBadge', this.onWeb_editBadge);
+        for (const [key, value] of Object.entries(this.users)) {
+            value.start();
+        }
+    }
+
+    closeSwitchBoard() {
+        this.parser.off("data", this.onParserData);
+        this.web.stop();
+        this.eventNames().forEach(element => {
+            this.removeAllListeners(element);
+        });
+
+        for (const [key, value] of Object.entries(this.users)) {
+            value.stop();
+        }
+        if (this.serialPort.isOpen) this.serialPort.close();
+    }
+
 
     openDatabase(version = false) {
         let db = new Database(this.config.database);//, { verbose: console.log }
@@ -63,7 +101,7 @@ class NowTalkMain extends events.EventEmitter {
         return db;
     }
 
-    loadDatabase() {
+    loadBadges() {
         let db = this.openDatabase(0);
         let main = this;
         let stmt = db.prepare("SELECT * FROM users where status & " + 0x30 + " !=0 order by status, name");
@@ -75,23 +113,24 @@ class NowTalkMain extends events.EventEmitter {
         db.close();
     }
 
-    update_db(user) {
+    updateBadge(user) {
         let status = user.status & 0xf0;
         let db = this.openDatabase(this.config.database);
         if (status == 0x00) {
             db.prepare("DELETE FROM users WHERE mac = ?").run([user._mac]);
         } else {
-            db.prepare("INSERT INTO users(mac, status, ip, name) " +
-                "  VALUES(?, ?, ?, ?)" +
+            db.prepare("INSERT INTO users(mac, status, ip, name, key) " +
+                "  VALUES(?, ?, ?, ?,?)" +
                 " ON CONFLICT(mac) DO UPDATE SET " +
                 "status = excluded.status," +
                 "ip = excluded.ip," +
-                "name = excluded.name").run(user._mac, status, user.ip, user.name);
+                "name = excluded.name," +
+                "key = excluded.key").run(user._mac, status, user.ip, user.name, user.badgeID);
         }
         db.close();
     }
 
-    makeUser(mac, info = false) {
+    getBadge(mac, info = false) {
         var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
         var user = this.users[_mac];
         var isNew = typeof user === "undefined";
@@ -109,7 +148,7 @@ class NowTalkMain extends events.EventEmitter {
         }
         if (isNew && (info === false || this.config.allowGuests)) {
             if (info === false) info = {};
-            user = new nowTalkUser({ mac: mac, status: info.status || 0x00, ip: info.ip || "", name: info.name || "" }, main);
+            user = new nowTalkUser({ mac: mac, status: info.status || 0x00, ip: info.ip || "", name: info.name || "" , key: info.key}, main);
         }
         if (typeof user !== "undefined") {
             this.users[_mac] = user;
@@ -147,38 +186,6 @@ class NowTalkMain extends events.EventEmitter {
         this.serialPort = serialPort;
     }
 
-    async start() {
-        return Promise.resolve(this.connect());
-    }
-
-    startSwitchBoard() {
-        this.parser.on("data", this.onParserData);
-
-        this.on("handle_h01", this.onHandle_Ping);
-        this.on("handle_h05", this.onHandle_NewDevice);
-
-        this.on("handle_*", this.onHandle_Info);
-
-        this.on("handle_E", this.onHandle_Error);
-        this.on("handle_!", this.onHandle_Warning);
-        for (const [key, value] of Object.entries(this.users)) {
-            value.start();
-        }
-    }
-
-    closeSwitchBoard() {
-        this.parser.off("data", this.onParserData);
-        this.web.stop();
-        this.eventNames().forEach(element => {
-            this.removeAllListeners(element);
-        });
-
-        for (const [key, value] of Object.entries(this.users)) {
-            value.stop();
-        }
-        if (this.serialPort.isOpen) this.serialPort.close();
-    }
-
     sendMessage(mac, code, data) {
 
         if (typeof data === "undefined") data = "";
@@ -210,6 +217,53 @@ class NowTalkMain extends events.EventEmitter {
             this.users[_mac] = null;
             delete this.users[_mac];
         }
+    }
+
+    onWeb_editBadge(_mac, action, value) {
+        if (typeof this.users[_mac] !== "undefined") {
+            let user = this.users[_mac];
+            let status = user.status;
+            switch (action) {
+                case "disable":
+                    user.setStatus(0x80, value);
+                    if (user.status === 0x01) {
+                        user.setStatus(0x03);
+                    }
+           //         this.web.onUpdateBadges(user);
+                    this.web.addMessage('success', "Badge's disable status is now changed.");
+                    return;
+                case "friend":
+                    user.setStatus(0x20, value);
+                    if (user.status === 0x01) {
+                        user.setStatus(0x03);
+                    }
+        //            this.web.updateSingleBadge(user);
+                    this.web.addMessage('success', "Badge's friend status is now changed.");
+                    return;
+                case "name":
+                    if (user.isStatus(0x10)) {
+                        if (user.name === value) {
+                            user._newName = null;
+                            this.web.addMessage('success', "Name has been reset to the orginal.");
+                        } else {
+                            //  this.updateBadge(user);
+                            user._newName = value;
+                            this.web.addMessage('success', "Name has been changed.");
+                        }
+                    } else {
+                        user.name = value;
+                        this.updateBadge(user);
+                        this.web.addMessage('success', "Name has been changed.");
+                    }
+                    return;
+                default:
+                    // do notting
+            }
+        } else {
+            this.web.onUpdateBadges();
+        }
+        this.web.addMessage('danger', "Change was not allowed.");
+
     }
 
     onRequestExternalIP() {
@@ -310,7 +364,7 @@ class NowTalkMain extends events.EventEmitter {
     }
 
     onHandle_Ping(msg) {
-        let user = this.makeUser(msg.mac);
+        let user = this.getBadge(msg.mac);
         if (typeof user !== "undefined") {
             //   if (user.status === 0x00) user.setStatus(0x02);
             user.onPingPong(msg);
@@ -327,10 +381,12 @@ class NowTalkMain extends events.EventEmitter {
 
         let timer;
 
+
         onNewBadgeTimeout = function () {
             main.off('handle_h10', onHandle_h10);
             main.off('handle_h11', onNewBadgeTimeout);
             main.off('web_newBadge', onWeb_newBadge);
+            this.unPeer(msg.mac);
             this.web.addNewBadge(false);
             main.web.addMessage('success', "Timeout while adding new device.");
             this.newBadgeInUse = false;
@@ -340,9 +396,11 @@ class NowTalkMain extends events.EventEmitter {
             clearTimeout(timer);
             main.off('handle_h10', onHandle_h10);
             main.off('handle_h11', onNewBadgeTimeout);
-            let user = main.makeUser(msg.mac, newbadge);
+            let user = main.getBadge(msg.mac);
+            user.fillInfo(newbadge);
             user.setStatus(0x10); user.setStatus(0x01);
             user.updateTimer();
+            main.updateBadge(user);
             main.web.addMessage('success', "New badge has been added.");
             return true;
         };
@@ -381,13 +439,26 @@ class NowTalkMain extends events.EventEmitter {
 
         if (!this.newBadgeInUse) {
             this.newBadgeInUse = true;
-            this.update_db({ mac: msg.mac, status: 0x00 });
-            if (this.web.addNewBadge(true)) {
-                timer = setTimeout(onNewBadgeTimeout, 90000);
-                this.on('web_newBadge', onWeb_newBadge);
+            
+            let user = this.getBadge(msg.mac);
+
+            if ((typeof user !== "undefined") && user.isStatus(0x10) && user.key) {
+                let test = user.key + "~" + this.config.externelIP + "~" +
+                    user.name + "~" + this.config.switchboardName;
+                test += "~" + crc16.checkSum("nowTalkSrv!" + test, 'utf8');
+                newbadge = { mac: msg.mac, ip: this.config.externelIP, name: user.name, key: user.key };
+                main.on("handle_h10", onHandle_h10);
+                main.on('handle_h11', onNewBadgeTimeout);
+                this.sendMessage(msg.mac, 0x07, test);
             } else {
-                console.error('No dashboard is open atm.')
-                this.newBadgeInUse = false;
+                this.updateBadge({ mac: msg.mac, status: 0x00 });
+                if (this.web.addNewBadge(true)) {
+                    timer = setTimeout(onNewBadgeTimeout, 90000);
+                    this.on('web_newBadge', onWeb_newBadge);
+                } else {
+                    console.error('No dashboard is open atm.')
+                    this.newBadgeInUse = false;
+                }
             }
         }
     }

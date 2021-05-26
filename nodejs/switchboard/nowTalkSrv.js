@@ -126,18 +126,37 @@ No commport selected use the following statements to continue:
     const main = new NowTalkMain(config);
 
     if (args.demo) {
-        main.makeUser(12342, { name:"pietje",ip:"", status:0x10});
-        main.makeUser(12354, { name: "katotje", ip: "", status: 0x90 });
-        main.makeUser(12534, { name: "jantje", ip: "", status: 0x11 });
-        main.makeUser(122534, { name: "jasmijn", ip: "255", status: 0x18 });
-        main.makeUser(12734, { name: "prettje", ip: "4567", status: 0x20 });
-        main.makeUser(12334, { name: "qwiebes", ip: "6e43", status: 0x21 });
-        main.makeUser(1222534, { name: "saniw", ip: "ssd255", status: 0x19 });
+        main.getBadge(12342, { name:"pietje",ip:"", status:0x10});
+        main.getBadge(12354, { name: "katotje", ip: "", status: 0x90 });
+        main.getBadge(12534, { name: "jantje", ip: "", status: 0x11 });
+        main.getBadge(122534, { name: "jasmijn", ip: "255", status: 0xA0 });
+        main.getBadge(12734, { name: "prettje", ip: "4567", status: 0x20 });
+        main.getBadge(1233904, { name: "qwiebes szfasdfasdfb vdfgadfa dvrgerf", ip: "6e43sd4545 4244 462465 4662435 33453 n", status: 0x11 });
+        main.getBadge(1222534, { name: "saniw", ip: "ssd255", status: 0x11 });
 
-        main.makeUser(122534, { name: "andre", ip: "123", status: 0x03 });
-        main.makeUser(127434, { name: "alvert", ip: "334", status: 0xA0 });
-        main.makeUser(123354, { name: "qwiebes", ip: "566", status: 0x02 });
-        main.makeUser(1234354, { name: "zander", ip: "as566", status: 0x80 });
+        main.getBadge(122534, { name: "andre", ip: "123", status: 0x03 });
+        main.getBadge(127434, { name: "alvert", ip: "334", status: 0xA0 });
+        main.getBadge(123354, { name: "qwiebes", ip: "566", status: 0x02 });
+        main.getBadge(1234354, { name: "zander", ip: "as566", status: 0x80 });
+
+        main.getBadge(14222534, { name: "saniw", ip: "ssd255", status: 0x11 });
+
+        main.getBadge(1422534, { name: "andre", ip: "123", status: 0x03 });
+        main.getBadge(1427434, { name: "alvert", ip: "334", status: 0xA0 });
+        main.getBadge(1423354, { name: "qwiebes", ip: "566", status: 0x02 });
+        main.getBadge(14234354, { name: "zander", ip: "as566", status: 0x80 });
+
+        main.getBadge(1922534, { name: "andre", ip: "123", status: 0x03 });
+        main.getBadge(1927434, { name: "alvert", ip: "334", status: 0xA0 });
+        main.getBadge(1923354, { name: "qwiebes", ip: "566", status: 0x02 });
+        main.getBadge(19234354, { name: "zander", ip: "as566", status: 0x80 });
+
+        main.getBadge(194222534, { name: "saniw", ip: "ssd255", status: 0x11 });
+
+        main.getBadge(19422534, { name: "andre", ip: "123", status: 0x03 });
+        main.getBadge(19427434, { name: "alvert", ip: "334", status: 0xA0 });
+        main.getBadge(19423354, { name: "qwiebes", ip: "566", status: 0x02 });
+        main.getBadge(194234354, { name: "zander", ip: "as566", status: 0x80 });
 
         main.web.addMessage('primary', "this is primary message");
         main.web.addMessage('info', "this is info message");

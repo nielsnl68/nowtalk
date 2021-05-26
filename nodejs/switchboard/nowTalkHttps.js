@@ -35,13 +35,15 @@ class NowTalkHttps {
             const user = userJoin(socket.id, 'username', 'room');
             // handle newBadge return
             socket.on("newBadge", data => {
-                console.warn('socket_newBadge', data);
                 if (typeof data === "boolean") {
                     socket.broadcast.emit("newBadge", false);
                 }
                 this.main.emit("web_newBadge", data);
             });
-
+            socket.on("editBadge", (mac,action,value) => {
+            //    console.warn('web_editBadge', mac, action, value);
+                this.main.emit("web_editBadge", mac, action, value);
+            });
             // Runs when client disconnects
             socket.on('disconnect', () => {
                 const user = userLeave(socket.id);
@@ -123,10 +125,14 @@ class NowTalkHttps {
         this.msgs.push([kind, msg]);
         this.io.emit('msg', kind, msg);
     }
+    
+    updateSingleBadge(badge) {
+        this.io.emit('update', [badge.info(true)], false);
+    }
 
     onUpdateBadges(socket) {
         let list = [];
-
+        socket = socket || this.io;
         for (const [key, value] of Object.entries(this.main.users)) {
             list.push(value.info(true));
         }

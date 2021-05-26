@@ -2,6 +2,8 @@ $(document).ready(function () {
     'use strict'
 
     //const newbadgeAdd = document.getElementById('newbadgeAdd');
+    let table = $("#listBadges");
+    let msgBody = $("#msgBody");
 
     const socket = io();
     var _errormsg = $("<div class='alert alert-danger m-1 p-1  text-center small'  role='alert'>Server has been disconnected.</div>");
@@ -101,8 +103,13 @@ $(document).ready(function () {
     });
 
     socket.on('update', (list, time) => {
+      //  console.info(list);
+        let editBtns = '<div class="px-0 btn-group">';
+        editBtns += '<button class="btn btn-outline-dark small btn-sm nowtalk-toggle" data-action="friend" title="Make a friend"><i class="fas fa-users" ></i></button> ';
+        editBtns += '<button class="btn btn-outline-dark btn-sm nowtalk-edit" data-action="name" title="Edit username"><i class="fas fa-edit" ></i></button> ';
+        editBtns += '<button class="btn btn-outline-danger btn-sm nowtalk-toggle" data-action="disable" title="Block badge"><i class="fas fa-times" ></i></button> ';
+        editBtns += "</div>";
 
-        let table = $("#listBadges");
         list.forEach((item) => {
             //       return { mac: useHexMac ? this._mac : this.mac, status: this.status, ip: this.ip, name: this.name, time: this.timestamp };
             let status_icon = 'handshake'; // item.status.toString(16);
@@ -137,40 +144,45 @@ $(document).ready(function () {
                 status_color = 'danger';
                 status_hint += 'disabled';
             }
-            let status = '<i class="text-' + status_color + ' fas fa-' + status_icon+'" title="'+status_hint+'"></i>';
-
-            /*
-            <i class="far fa-comments"></i>
-            <i class="fas fa-bullhorn"></i>
-            <i class="fas fa-deaf"></i>
-            <i class="fas fa-globe"></i>
-            <i class="fas fa-microphone-alt-slash"></i>
-            <i class="fas fa-user"></i>
-            <i class="fas fa-user-alt-slash"></i>
-            <i class="fas fa-user-clock"></i>
-            <i class="fas fa-users"></i>
-            
-            <i class="fas fa-people-arrows"></i>
-            <i class="fas fa-mail-bulk"></i>
-            <i class="fas fa-handshake-slash"></i>
-            */
+            let status = '<i class="text-' + status_color + ' me-1 fas fa-' + status_icon+'" title="'+status_hint+'" ></i>';
 
             let x = item.time;
-            let progress = '<div class="progress-bar" role="progressbar" aria-valuenow="' + x + '" aria-valuemin="0" aria-valuemax="100" style="width: ' + x + '%"></div>';
-            progress = "<div class='progress'>" + progress + "</div>";
-            let newRow = "<td  class='py-0 text-center align-middle'></td><td>" + item.mac.substr(1) + "</td><td>" + item.name + "</td><td>" + item.ip + "</td><td class='align-middle'>" + progress + "</td>";
+            
+
             if (table.has("#" + item.mac).length == 0) {
-                table.append("<tr id='" + item.mac + "'></tr>");
-            }
+                let newRow = "<tr id='" + item.mac + "' class='align-middle'>";
+                newRow += "<td class='text-center nowtalk-status' ></td>";
+                newRow += "<td class='text-truncate'>" + item.mac.substr(1) + "</td>";
+                newRow += "<td class='nowtalk-name text-truncate'></td>";
+                newRow += "<td class='nowtalk-ip text-truncate' ></td><td class='d-inline-block'>";
+                newRow += "<div class='progress my-2'>";
+                newRow += '<div class="progress-bar" role="progressbar" aria-valuenow="' + x + '" aria-valuemin="0" aria-valuemax="100" style="width: ' + x + '%"></div>';
+                newRow += "</div>";
+                newRow += editBtns + "</td></tr >";
+                table.append(newRow);
+            } 
             let row = $("#" + item.mac);
-            row.empty();
-            row.append(newRow);
-            row.attr('data-time', time);
-            row.attr('data-status', item.status);
-            let xy = row.children().first();
-            xy.append(status);
+            row.attr('data-status', "H"+("0"+item.status.toString(16)).substr(-2));
+        
+            row.attr('data-progress',  item.time);
+            row.children(".nowtalk-status").html(status);
+            row.children(".nowtalk-name").text(item.name);
+            row.children(".nowtalk-ip").text(item.ip);
+            row.find(".progress-bar").attr("aria-valuenow", x).css("width", x+"%");
+            
+
+            row.find('[data-action="friend"]').prop('disabled', (item.status & 0x10) !== 0).attr('data-status', (item.status & 0x20) !== 0);
+            row.find("[data-action='name']").prop('disabled', (item.status & 0x30) === 0).attr('data-name', item.name);
+            row.find('[data-action="disable"]').attr('data-status', (item.status & 0x80) !== 0);
+            row.attr('data-status', ("0"+item.status.toString(16)).substr(-2));
+            if (typeof time === "string") {
+                row.attr('data-time', time);
+            }
         });
-        table.children('[data-time!=' + time + ']').remove();
+
+        if (typeof time === "string") {
+            table.children('[data-time!=' + time + ']').remove();
+        }
     });
 
 
@@ -189,7 +201,7 @@ $(document).ready(function () {
                 _msg.addClass("col-12 text-" + kind);
         }
         row.append(_msg);
-        $("#msgBody").append(row);
+        msgBody.append(row);
         var elem = document.getElementById('msgBody');
         elem.scrollTop = elem.scrollHeight;
     }
@@ -211,10 +223,8 @@ $(document).ready(function () {
         return crc === baseChars.indexOf(chr);
     }
 
-    const email = document.getElementById("badgeid");
-
-    badgeid.addEventListener("input", function (event) {
-        let id = $(badgeid).val();
+    $("#badgeid").on("input", function (event) {
+        let id = $(this).val();
         if (!checkBadgeID(id)) {
             email.setCustomValidity("This is an invalid badgeID. The code is case sensitive!");
         } else {
@@ -222,45 +232,23 @@ $(document).ready(function () {
         }
     });
 
-    $("#listBadges").on("click", "tr", function (event) {
-        event.preventDefault();
-
-        $("#listBadges tr.table-info").removeClass('table-info');
-        $(this).addClass("table-info");
-        $("#editBadgeAlert").show();
-        $("#editBadgeAlert").attr('data-id', $(this).attr('id'));
-        let status = $(this).data('status') * 1;
-        if ((status & 0x80) !== 0) {
-            $("#changeDisable").removeClass('btn-primary').addClass('btn-outline-primary');
-        } else {
-            $("#changeDisable").addClass('btn-primary').removeClass('btn-outline-primary');
-        }
-        if ((status & 0x20)!== 0) {
-            $("#changeFriend").removeClass('btn-primary').addClass('btn-outline-primary');
-        } else {
-            $("#changeFriend").addClass('btn-primary').removeClass('btn-outline-primary');
-        }
-        if ((status & 0x10) !== 0) {
-            $("#changeFriend").attr('disabled', 'disabled' )
-        } else {
-            $("#changeFriend").removeAttr('disabled', 'disabled')
-        }
-
-    });
-    $(".toggleButton").on('click', (e, x, y, z) => {
+    table.on ('click', ".nowtalk-toggle", (e) => {
         let button = $(this.activeElement);
+        let row = button.closest('tr');
         e.preventDefault();
-        button.toggleClass('btn-primary');
-        button.toggleClass('btn-outline-primary');
-        socket.emit('editBadge', button.parent().data('id'), button.data('action'), button.hasClass('btn-primary'));
+        socket.emit('editBadge', row.prop('id'), button.data('action'),  button.data("status"));
+    });
 
-    });
-    
-    $("#editbadgeClose").on('click', (e) => {
+    table.on('click', '.nowtalk-edit', (e) => {
+        let button = $(this.activeElement);
+        let row = button.closest('tr');
         e.preventDefault();
-        $("#listBadges tr.table-info").removeClass('table-info');
-        $("#editBadgeAlert").hide();
-        $("#editBadgeAlert").removeAttr('data-id');
+        var person = prompt("Please change the username", button.data('name'));
+
+        if (person != null) {
+            socket.emit('editBadge', row.prop('id'), button.data('action'), person);
+        }
     });
+
 
 });
