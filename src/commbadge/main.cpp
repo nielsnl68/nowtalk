@@ -1,10 +1,10 @@
 /*
   Rui Santos
   Complete project details at https://RandomNerdTutorials.com/esp-now-esp8266-nodemcu-arduino-ide/
-  
+
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files.
-  
+
   The above copyright notice and this permission notice shall be included in all
   copies or substantial portions of the Software.
 */
@@ -15,27 +15,26 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 
-#include <TFT_eSPI.h>
+#include <Button2.h>
 
 #include "variables.h"
 
- #include "nowtalk.h"
- #include "esp_adc_cal.h"
- #include "switchboard.h"
-#include "Button2.h"
+#include "nowtalk.h"
+//#include "esp_adc_cal.h"
+#include "switchboard.h"
+#include"display.h"
+
 
 #define BUTTON_1 35
 #define BUTTON_2 13
 #define BUTTON_3  0
-
- TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom library
 
 Button2 btn1(BUTTON_1);
 Button2 btn2(BUTTON_2);
 Button2 btn3(BUTTON_3);
 
 // Callback when data is sent
-void OnDataSent(const uint8_t *mac, esp_now_send_status_t sendStatus)
+void OnDataSent(const uint8_t* mac, esp_now_send_status_t sendStatus)
 {
     if (sendStatus != ESP_NOW_SEND_SUCCESS)
     {
@@ -44,10 +43,10 @@ void OnDataSent(const uint8_t *mac, esp_now_send_status_t sendStatus)
 }
 
 // Callback function that will be executed when data is received
-void OnDataRecv(const uint8_t *mac, const uint8_t *buf, int count)
+void OnDataRecv(const uint8_t* mac, const uint8_t* buf, int count)
 {
     // copy to circular buffer
-  
+
     nowtalk_t data;
     memcpy(data.mac, mac, 6);
     data.code = buf[0];
@@ -87,7 +86,7 @@ void handleCommand()
         Serial.print('~');
         Serial.print(config.userName);
         Serial.print('~');
-        Serial.println(VERSION,3);
+        Serial.println(VERSION, 3);
     }
     else
     {
@@ -113,7 +112,7 @@ void serialEvent()
         }
     }
 }
-void ClearBadge(Button2& b) {    
+void ClearBadge(Button2& b) {
     loadConfiguration(true);
     ESP.restart();
 }
@@ -122,18 +121,21 @@ void RegisterBadge(Button2& b)
 {
     if (config.registrationMode)
     {
-        broadcast(ESPTALK_CLIENT_NEWPEER, "");
+        broadcast(NOWTALK_CLIENT_NEWPEER, "");
         // config.registrationMode = true;
-        message("Badge ID:\n" + badgeID());
+        ShowMessage("Badge ID:\n" + badgeID());
     }
     else if (config.masterAddress[0] != 0)
     {
-        send_message(config.masterAddress, ESPTALK_CLIENT_START_CALL, "");
+        send_message(config.masterAddress, NOWTALK_CLIENT_START_CALL, "");
     }
     else
     {
-        broadcast(ESPTALK_CLIENT_PING, "");
+        broadcast(NOWTALK_CLIENT_PING, "");
     }
+}
+void longpress(Button2& btn) {
+    GoSleep();
 }
 
 void setup()
@@ -146,54 +148,65 @@ void setup()
         Serial.println("* SPIFFS Mount Failed");
         return;
     }
-    loadConfiguration();
+    if (!config.wakeup) {
+        loadConfiguration();
+    }
 
     inputString.reserve(300);
 
     // Set device as a Wi-Fi Station
+    WiFi.disconnect(true, true);
     WiFi.mode(WIFI_AP_STA);
 
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(config.channel, WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(false);
 
-    Serial.printf("ESP32 Chip model = %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
-
-    message("Application version: " + String(VERSION, 3));
-
-    Serial.print(F("* MasterIP: "));
-    Serial.println(config.masterIP);
-    Serial.print(F("* Username: "));
-    Serial.println(config.userName);
-    Serial.print(F("* MAC Address: "));
-    Serial.println(WiFi.macAddress());
-    Serial.print(F("* WiFi Channel: "));
-    Serial.println(WiFi.channel());
-
-    if (esp_now_init() != 0)
-    {
-        Serial.println("* Error initializing ESP-NOW");
+    initTFT(config.wakeup);
+    
+    if (!config.wakeup) {
+        ShowMessage("Application version: \n" + String(VERSION, 3), '*');
+        Serial.printf("* ESP32 Chip model: %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
+        Serial.print(F("* MasterIP: "));
+        Serial.println(config.masterIP);
+        Serial.print(F("* Username: "));
+        Serial.println(config.userName);
+        Serial.print(F("* MAC Address: "));
+        Serial.println(WiFi.macAddress());
+        Serial.print(F("* WiFi Channel: "));
+        Serial.println(WiFi.channel());
+        config.lastTime = millis() - (config.timerDelay + 10);
+        delay(1500);
+    }
+    if (esp_now_init() != 0) {
+        ShowMessage("Error initializing ESP-NOW",'E');
         return;
     }
 
     esp_now_register_send_cb(OnDataSent);
     esp_now_register_recv_cb(OnDataRecv);
 
-    config.lastTime = millis() - (config.timerDelay + 10);
-
     btn1.setClickHandler(RegisterBadge);
     btn2.setClickHandler(RegisterBadge);
-     btn3.setTripleClickHandler(ClearBadge);
-
+    btn3.setClickHandler(RegisterBadge);
+    
+    btn3.setTripleClickHandler(ClearBadge);
+    btn3.setLongClickDetectedHandler(longpress);
+    btn3.setLongClickTime(1000);
     if (config.registrationMode) {
-        message("New Badge!\nPress Enter Button.");
+        ShowMessage("New Badge!\n\nPress Enter Button\nto register...", '!');
     }
+    else {
+        ShowMessage("READY",'*');
+    }
+    config.wakeup = false;
 }
 
 void button_loop()
 {
     btn1.loop();
     btn2.loop();
+    btn3.loop();
 }
 
 
@@ -208,11 +221,11 @@ void loop()
     }
     if (!config.registrationMode)
     {
-        if ((millis() - config.lastTime) > config.timerDelay + (config.masterAddress[0] == 0 ? 5 : 1))
+        if ((millis() - config.lastTime) > config.timerDelay * (config.masterAddress[0] == 0 ? 5 : 1))
         {
             if (config.masterAddress[0] == 0)
             {
-                Serial.println("Search master");
+                Serial.println("*  Search master");
                 broadcast(0x01, "");
             }
             else
