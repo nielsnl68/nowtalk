@@ -104,11 +104,7 @@ $(document).ready(function () {
 
     socket.on('update', (list, time) => {
       //  console.info(list);
-        let editBtns = '<div class="px-0 btn-group">';
-        editBtns += '<button class="btn btn-outline-dark small btn-sm nowtalk-toggle" data-action="friend" title="Make a friend"><i class="fas fa-users" ></i></button> ';
-        editBtns += '<button class="btn btn-outline-dark btn-sm nowtalk-edit" data-action="name" title="Edit username"><i class="fas fa-edit" ></i></button> ';
-        editBtns += '<button class="btn btn-outline-danger btn-sm nowtalk-toggle" data-action="disable" title="Block badge"><i class="fas fa-times" ></i></button> ';
-        editBtns += "</div>";
+
 
         list.forEach((item) => {
             //       return { mac: useHexMac ? this._mac : this.mac, status: this.status, ip: this.ip, name: this.name, time: this.timestamp };
@@ -142,35 +138,49 @@ $(document).ready(function () {
             if ((item.status & 0x80) == 0x80) {
                 status_icon += "-slash";
                 status_color = 'danger';
-                status_hint += 'disabled';
+                status_hint += ' disabled';
             }
-            let status = '<i class="text-' + status_color + ' me-1 fas fa-' + status_icon+'" title="'+status_hint+'" ></i>';
-
-            let x = item.time;
-            
+            let statusClass = 'nowtalk-status text-' + status_color + ' me-1 fas fa-' + status_icon;
 
             if (table.has("#" + item.mac).length == 0) {
                 let newRow = "<tr id='" + item.mac + "' class='align-middle'>";
-                newRow += "<td class='text-center nowtalk-status' ></td>";
+                newRow += "<td class='text-center'>";
+                newRow += '<i data-action="status"  class="' + statusClass + '" title="' + status_hint+ '" data-bs-toggle="dropdown" aria-expanded="false" role="button" tabindex="0"></i>';
+                newRow += "<ul class='dropdown-menu dropdown-menu-dark ' style='min-width:none'><li>";
+
+                newRow += '<div class="p-0 btn-group">';
+                newRow += '<button class="dropdown-item nowtalk-toggle" data-action="friend" title="Make a friend"><i class="fas fa-users" ></i></button> ';
+                newRow += '<button class="dropdown-item nowtalk-edit" data-action="name" title="Edit username"><i class="fas fa-edit" ></i></button> ';
+                newRow += '<button class="dropdown-item text-danger nowtalk-toggle" data-action="disable" title="Block badge"><i class="fas fa-times" ></i></button> ';
+                newRow += "</div></li></ul";
+
+                newRow +="</td > ";
                 newRow += "<td class='text-truncate'>" + item.mac.substr(1) + "</td>";
                 newRow += "<td class='nowtalk-name text-truncate'></td>";
-                newRow += "<td class='nowtalk-ip text-truncate' ></td><td class='d-inline-block'>";
+                newRow += "<td class='nowtalk-ip text-truncate' ></td><td class=''>";
                 newRow += "<div class='progress my-2'>";
-                newRow += '<div class="progress-bar" role="progressbar" aria-valuenow="' + x + '" aria-valuemin="0" aria-valuemax="100" style="width: ' + x + '%"></div>';
-                newRow += "</div>";
-                newRow += editBtns + "</td></tr >";
+                newRow += '<div class="progress-bar" role="progressbar" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100" style="width: 50%"></div>';
+                newRow += "</div></td></tr >";
                 table.append(newRow);
             } 
             let row = $("#" + item.mac);
             row.attr('data-status', "H"+("0"+item.status.toString(16)).substr(-2));
-        
-            row.attr('data-progress',  item.time);
-            row.children(".nowtalk-status").html(status);
+
+            row.attr('data-progress', item.time);
+            let statusDOM = row.find('[data-action="status"]');
+            let oldclass =statusDOM.attr('class');
+            if (statusDOM.hasClass('show')) { statusClass += " show";}
+            if (oldclass !== statusClass) {
+          //      console.info([statusClass, oldclass]);
+                row.find('[data-action="status"]').attr('class', statusClass);
+                row.find('[data-action="status"]').attr('title', status_hint);
+            }
             row.children(".nowtalk-name").text(item.name);
             row.children(".nowtalk-ip").text(item.ip);
+            let x = item.time;
             row.find(".progress-bar").attr("aria-valuenow", x).css("width", x+"%");
             
-
+            console.info(row.find('[data-action="disable"]'));
             row.find('[data-action="friend"]').prop('disabled', (item.status & 0x10) !== 0).attr('data-status', (item.status & 0x20) !== 0);
             row.find("[data-action='name']").prop('disabled', (item.status & 0x30) === 0).attr('data-name', item.name);
             row.find('[data-action="disable"]').attr('data-status', (item.status & 0x80) !== 0);
@@ -235,14 +245,13 @@ $(document).ready(function () {
     table.on ('click', ".nowtalk-toggle", (e) => {
         let button = $(this.activeElement);
         let row = button.closest('tr');
-        e.preventDefault();
         socket.emit('editBadge', row.prop('id'), button.data('action'),  button.data("status"));
     });
 
     table.on('click', '.nowtalk-edit', (e) => {
         let button = $(this.activeElement);
         let row = button.closest('tr');
-        e.preventDefault();
+
         var person = prompt("Please change the username", button.data('name'));
 
         if (person != null) {
@@ -250,5 +259,11 @@ $(document).ready(function () {
         }
     });
 
+    table.on('contextmenu', '.nowtalk-status', (e) => {
+        e.preventDefault();
+   //     console.info('contextmenu clicked');
+        $(this).trigger('click');
+        return false;
+    })
 
 });
