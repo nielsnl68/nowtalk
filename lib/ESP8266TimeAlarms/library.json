@@ -1,0 +1,17 @@
+{
+"name": "ESP8266TimeAlarms",
+"frameworks": ["Arduino"],
+"keywords": "Time, alarm, schedule, date, hour, minute, second, day, week, month, year",
+"description": "ESP8266 v2.4.0+ Schedule alarms to occur at specific times",
+"url": "http://playground.arduino.cc/Code/Time",
+"authors":
+{
+        "name": "Michael Margolis",
+        "name": "Jonas Hagberg"
+},
+"repository":
+{
+    "type": "git",
+    "url": "https://github.com/jhagberg/ESP8266TimeAlarms"
+}
+}
