@@ -22,6 +22,7 @@
   SOFTWARE.
 */
 
+#pragma once
 
 #include<Arduino.h>
 #include "dataBuffer.h"

@@ -1,0 +1,21 @@
+{
+  "name": "dataChain",
+  "keywords": "dataChain",
+  "description": "A simple and efficient buffered Data chain  library for embedded C++. With this library you are able to import data from different sources chain them together with some converters and export them to other sources",
+  "homepage": "https://spectronix.nl/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nielsnl68/nowtalk/src/dataChain"
+  },
+  "version": "0.01",
+  "authors": {
+    "name": "Niels v/d Spek",
+    "url": "https://spectronix.nl"
+  },
+  "exclude": [
+    ".github",
+    "extras"
+  ],
+  "frameworks": "*",
+  "platforms": "*"
+}

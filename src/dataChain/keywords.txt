@@ -1,0 +1,7 @@
+# Syntax Coloring Map For CRC
+
+# Datatypes (KEYWORD1)
+dataChain	KEYWORD1
+
+# Methods and Functions (KEYWORD2)
+#count	KEYWORD2
