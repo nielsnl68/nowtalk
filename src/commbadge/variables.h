@@ -1,14 +1,18 @@
+#pragma once
+
 #ifndef NOWTALK_VARBS
 #define NOWTALK_VARBS
 
+#define ARDUINOJSON_USE_LONG_LONG 1
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include "FS.h"
 #include "SPIFFS.h"
 #include <ArduinoJson.h>
+#include "TimeEvents.h"
 
 
-#define VERSION 32.246
+#define VERSION 32.250
 
 /// Request message codes :
 
@@ -55,7 +59,6 @@
 #define NOWTALK_PEER_BLOCKED 0x80
 
 
-
 struct config_t
 {
     boolean wakeup = false;
@@ -63,18 +66,24 @@ struct config_t
     unsigned long timerDelay = 30000; // send readings timer
     unsigned long eventInterval = 5000;
     bool registrationMode = false;
-    char masterIP[32]   = "<None>";
+    char masterIP[40] = "<None>";
     char userName[64] = "<None>";
     uint8_t masterAddress[6] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     byte channel = 0;
-    char hostname[64] = "";
+    char hostname[32] = "";
     boolean TFTActive = false;
     int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
     int sprVolume = 40;
+   
 };
 const char* configFile = "/config.json"; // <- SD library uses 8.3 filenames
 
-RTC_DATA_ATTR config_t config;//
+config_t config;//
+
+RTC_DATA_ATTR boolean wakeup = false;
+
+alarm_t alarms[dtNBR_ALARMS];
+TimeEventsClass myEvents = TimeEventsClass(alarms);
 
 typedef struct
 {
@@ -120,14 +129,6 @@ String inputString = "";     // a String to hold incoming data
 bool stringComplete = false; // whether the string is complete
 
 uint16_t vref = 1100;
-
-// REPLACE WITH RECEIVER MAC Address
-///
-// Structure example to send data
-// Must match the receiver structure
-
-// Replace with your network credentials (STATION)
-
 
 String GetExternalIP()
 {
@@ -191,7 +192,8 @@ void loadConfiguration(bool clear = false)
 {
     if (clear)
         SPIFFS.remove(configFile);
-
+    
+    // memset(*config, 0, sizeof(config));
     // Open file for reading
     fs::File file = SPIFFS.open(configFile);
 
@@ -205,7 +207,6 @@ void loadConfiguration(bool clear = false)
     if (error)
         Serial.println(F("Failed to read file, using default configuration"));
     file.close();
-
     // Copy values from the JsonDocument to the Config
     config.channel = doc["channel"] | 0;
     //config.port = doc["port"] | 2731;
@@ -222,6 +223,20 @@ void loadConfiguration(bool clear = false)
     if ((strcmp(config.masterIP, "<None>") == 0) || (strcmp(config.userName, "<None>") == 0))
     {
         config.registrationMode = true;
+    }
+    
+    for (JsonObject elem : doc["alarms"].as<JsonArray>()) {
+        int id = elem["id"];
+        uint64_t nt = elem["nextTrigger"].as<uint64_t>();
+        alarms[id].value = elem["time"];
+        alarms[id].nextTrigger = nt;
+        alarms[id].Mode.alarmType = elem["mode_alarmType"];
+        alarms[id].Mode.isEnabled = elem["mode_isEnabled"]; 
+        alarms[id].Mode.isOneShot = elem["mode_isOneShot"]; 
+        alarms[id].onTickHandler = (OnTick_t)elem["trigger"].as<uint32_t>();
+       // Serial.printf("%lli, %lli ", alarms[id].nextTrigger, myEvents.timeNow());
+        myEvents.updateNextTrigger(id);
+       // Serial.printf("%lli, %lli\n", alarms[id].nextTrigger, alarms[id].nextTrigger - myEvents.timeNow());
     }
 }
 
@@ -256,7 +271,21 @@ void saveConfiguration()
     doc["ledBacklight"] = config.ledBacklight ; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
     doc["sprVolume"] = config.sprVolume;
 
+    JsonArray data = doc.createNestedArray("alarms");
+    for (uint8_t id = 0; id < dtNBR_ALARMS; id++) {
+        if (alarms[id].Mode.alarmType != dtNotAllocated) {
+            JsonObject data_0 = data.createNestedObject();
+            data_0["id"]         = id;
+            data_0["time"]     = alarms[id].value;
+            data_0["nextTrigger"] = alarms[id].nextTrigger;
+            data_0["mode_alarmType"] = alarms[id].Mode.alarmType;
+            data_0["mode_isEnabled"] = alarms[id].Mode.isEnabled;
+            data_0["mode_isOneShot"] = alarms[id].Mode.isOneShot;
+            data_0["trigger"] = (uint32_t) alarms[id].onTickHandler;
+        }
+    }
 
+    
     if (serializeJson(doc, file) == 0)
     {
         Serial.println(F("Failed to write to file"));

@@ -13,9 +13,8 @@
 #include "nowtalk.h"
 
 void ShowMessage(const String msg, char SerialPrefix = ' ');
-
 void ShowMessage(const char* msg, char SerialPrefix = ' ');
-
+void initTFT();
 
 #define ADC_EN              14  //ADC_EN is the ADC detection enable port
 #define ADC_PIN             34
@@ -101,7 +100,7 @@ void drawString(const char* msg) {
     pos[rows] = len;
     i = tft.textWidth(buf);
     if (i > maxWidth)maxWidth = i;
-    int heigth = rows * tft.fontHeight();
+    int heigth = rows * (tft.fontHeight() + 1);
     i = 1;
     while (heigth * i <= (tft.height() - 20) && maxWidth * i <= tft.width()) { i++; }
     if (i > 1) i--;
@@ -109,12 +108,12 @@ void drawString(const char* msg) {
     w = tft.width() / 2;
     tft.setTextDatum(TC_DATUM);
     tft.setTextSize(i);
-  //  Serial.printf("%d (%d %d) %d,%d\n\n", i, heigth * i, maxWidth * i, (tft.height() - 20), tft.width());
+    //  Serial.printf("%d (%d %d) %d,%d\n\n", i, heigth * i, maxWidth * i, (tft.height() - 20), tft.width());
 
     for (int z = 0; z < rows; z++) {
         memset(buf, 0, 255);
         strncpy(buf, msg + pos[z], (pos[z + 1] - pos[z]));
-        tft.drawString(buf, w, (20 + h) + (z * tft.fontHeight()));
+        tft.drawString(buf, w, (20 + h) + (z * (tft.fontHeight() + 1)));
     }
 }
 
@@ -124,8 +123,12 @@ void ShowMessage(const String  msg, char SerialPrefix) {
 }
 
 void ShowMessage(const char* msg, char SerialPrefix) {
-
-    showVoltage(true);
+    if (!config.TFTActive) {
+        initTFT();
+    }
+    else {
+        showVoltage(false);
+    }
     if (config.TFTActive) {
         tft.setTextDatum(MC_DATUM);
 
@@ -148,7 +151,7 @@ void ShowMessage(const char* msg, char SerialPrefix) {
 }
 
 
-void initTFT(boolean weakup) {
+void initTFT() {
 
     /*
     ADC_EN is the ADC detection enable port
@@ -159,13 +162,6 @@ void initTFT(boolean weakup) {
     delay(10);
     config.TFTActive = !digitalRead(TFT_BL);
 
-    pinMode(ADC_EN, OUTPUT);
-    digitalWrite(ADC_EN, HIGH);
-    esp_adc_cal_characteristics_t adc_chars;
-    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &adc_chars);    //Check type of calibration value used to characterize ADC
-    if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        vref = adc_chars.vref;
-    }
 
 
     if (config.TFTActive) {
@@ -174,7 +170,7 @@ void initTFT(boolean weakup) {
         ledcWrite(pwmLedChannelTFT, config.ledBacklight);
         tft.init();
         tft.setRotation(1);
-        if (!weakup) {
+        if (!config.wakeup) {
             tft.fillScreen(TFT_BLACK);
             tft.setSwapBytes(true);
             tft.pushImage(0, 0, 240, 135, nowTalk);
@@ -186,12 +182,29 @@ void initTFT(boolean weakup) {
 
 
 void GoSleep() {
-    ShowMessage("Release the button.", '!');
-    while (digitalRead(GPIO_NUM_0) == 0) {}
-    config.wakeup = true;
+    uint64_t nt = myEvents.getNextTrigger();
+    if (nt > 0) {
+        uint64_t time = (nt - myEvents.timeNow());
+        if (time > 1000) {
+            esp_sleep_enable_timer_wakeup((time-1000) * 1000);
+        } else {
+            if (digitalRead(GPIO_NUM_0) == 0) {
+                ShowMessage("Release the button.\n Timer prevent sleep mode.", '!');
+                while (digitalRead(GPIO_NUM_0) == 0) {}
+            }
+            return;
 
-    ShowMessage("Press again to wake up", '!');
-    delay(3000);
+        }
+    }
+
+    if (digitalRead(GPIO_NUM_0) == 0) {
+        ShowMessage("Release the button.", '!');
+        while (digitalRead(GPIO_NUM_0) == 0) {}
+        ShowMessage("Press left key to wake up", '!');
+        delay(3000);
+    }
+    wakeup = true;
+    saveConfiguration();
 
     if (config.TFTActive) {
         ledcWrite(TFT_BL, 0);
@@ -206,3 +219,8 @@ void GoSleep() {
 }
 
 #endif
+/*
+.pio\build\CommBadge\src\commbadge\main.cpp.o: In function `timeNow()':
+C:\Users\HP\Documents\PlatformIO\Projects\nowTalk/src\commbadge/TimeAlarms.h:128: multiple definition of `timeNow()'
+.pio\build\CommBadge\src\commbadge\TimeAlarms.cpp.o:C:\Users\HP\Documents\PlatformIO\Projects\nowTalk/src\commbadge/TimeAlarms.h:128: first defined here
+*/

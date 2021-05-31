@@ -123,7 +123,7 @@ void RegisterBadge(Button2& b)
     {
         broadcast(NOWTALK_CLIENT_NEWPEER, "");
         // config.registrationMode = true;
-        ShowMessage("Badge ID:\n" + badgeID());
+        ShowMessage("Badge code:\n" + badgeID());
     }
     else if (config.masterAddress[0] != 0)
     {
@@ -138,19 +138,44 @@ void longpress(Button2& btn) {
     GoSleep();
 }
 
+void ping() {
+    Serial.println("ping");
+    if (config.wakeup) GoSleep();
+}
+
+void print_wakeup_reason() {
+    esp_sleep_wakeup_cause_t wakeup_reason;
+
+    wakeup_reason = esp_sleep_get_wakeup_cause();
+
+    switch (wakeup_reason)
+    {
+    case ESP_SLEEP_WAKEUP_EXT0: Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1: Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER: Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD: Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP: Serial.println("Wakeup caused by ULP program"); break;
+    default: Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason); break;
+    }
+}
+
 void setup()
 {
     // Init Serial Monitor
     Serial.begin(115200);
+ //   Serial.println(wakeup);
+    config.wakeup = wakeup;
+ //   print_wakeup_reason();
 
     if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED))
     {
-        Serial.println("* SPIFFS Mount Failed");
+        Serial.println("E SPIFFS Mount Failed");
+        esp_restart();
         return;
     }
-    if (!config.wakeup) {
-        loadConfiguration();
-    }
+
+    loadConfiguration();
+
 
     inputString.reserve(300);
 
@@ -162,11 +187,19 @@ void setup()
     esp_wifi_set_channel(config.channel, WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(false);
 
-    initTFT(config.wakeup);
-    
+    pinMode(ADC_EN, OUTPUT);
+    digitalWrite(ADC_EN, HIGH);
+    esp_adc_cal_characteristics_t adc_chars;
+    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &adc_chars);    //Check type of calibration value used to characterize ADC
+    if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+        vref = adc_chars.vref;
+    }
+
+
     if (!config.wakeup) {
-        ShowMessage("Application version: \n" + String(VERSION, 3), '*');
-        Serial.printf("* ESP32 Chip model: %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
+        initTFT();
+        ShowMessage("Version: " + String(VERSION, 3), '*');
+        Serial.printf("* Model: %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
         Serial.print(F("* MasterIP: "));
         Serial.println(config.masterIP);
         Serial.print(F("* Username: "));
@@ -175,14 +208,19 @@ void setup()
         Serial.println(WiFi.macAddress());
         Serial.print(F("* WiFi Channel: "));
         Serial.println(WiFi.channel());
+
         config.lastTime = millis() - (config.timerDelay + 10);
-        delay(1500);
-    }
-    if (esp_now_init() != 0) {
-        ShowMessage("Error initializing ESP-NOW",'E');
-        return;
+        delay(2500);
+        
+        myEvents.free(0);
+        myEvents.timerRepeat(10000, ping);
     }
 
+    if (esp_now_init() != 0) {
+        ShowMessage("Error initializing ESP-NOW", 'E');
+        return;
+    }
+    
     esp_now_register_send_cb(OnDataSent);
     esp_now_register_recv_cb(OnDataRecv);
 
@@ -193,13 +231,15 @@ void setup()
     btn3.setTripleClickHandler(ClearBadge);
     btn3.setLongClickDetectedHandler(longpress);
     btn3.setLongClickTime(1000);
-    if (config.registrationMode) {
-        ShowMessage("New Badge!\n\nPress Enter Button\nto register...", '!');
+    config.wakeup = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
+    if (!config.wakeup) {
+        if (config.registrationMode) {
+            ShowMessage("New Badge!\n\nPress Enter Button\nto register...", '!');
+        }
+        else {
+            ShowMessage("READY", '*');
+        }
     }
-    else {
-        ShowMessage("READY",'*');
-    }
-    config.wakeup = false;
 }
 
 void button_loop()
@@ -213,6 +253,7 @@ void button_loop()
 void loop()
 {
     button_loop();
+    myEvents.loop();
     if (read_idx != write_idx)
     {
         nowtalk_t espnow = circbuf[read_idx];
