@@ -223,7 +223,6 @@ class NowTalkUser extends events.EventEmitter {
             this.sendMessage(0x03);
             return true;
         } else {
-            if (this.isStatus(0x02)) { this.setStatus(0x03); } else { this.setStatus(0x01);}
             this.updateTimer();
             if (this._newIP !== null) {
                 this.sendMessage(0x0e, this.ip + "~" + this._newIP);
@@ -232,9 +231,14 @@ class NowTalkUser extends events.EventEmitter {
                 this.sendMessage(0x0d, this.name + "~" + this._newName);
                 this.once("handle_h10", this.onAckChange)
             } else {
-                this.sendMessage(0x02);
+                if (this.isStatus(0x01)) {
+                    this.sendMessage(0x02);
+                } else {
+                    this.sendMessage(0x02, this.main.config.switchboardName + "~" + Date.now().toJSON());
+                }
                 this.off("handle_h30", this.onCallRequest);
             }
+            if (this.isStatus(0x02)) { this.setStatus(0x03); } else { this.setStatus(0x01); }
             return true;
         }
     }
@@ -251,8 +255,11 @@ class NowTalkUser extends events.EventEmitter {
             if (msg.array.length > 2) {
                 this.badgeID = msg.array[2];
             }
-
-            this.sendMessage(0x02);
+            if (this.isStatus(0x01)) {
+                this.sendMessage(0x02);
+            } else {
+                this.sendMessage(0x02, this.main.config.switchboardName + "~" + Date.now().toJSON());
+            }
             this.setStatus(0x03);
             this.updateTimer();
         }
@@ -281,7 +288,7 @@ class NowTalkUser extends events.EventEmitter {
             this._newName = null;
             this.updateBadge();
         }
-        this.sendMessage(0x02);
+        this.sendMessage(0x02, this.main.config.switchboardName + "~" + Date.now().toJSON());
         this.on("handle_h30", this.onCallRequest);
     }
 

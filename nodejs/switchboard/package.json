@@ -6,7 +6,6 @@
   "license": "ISC",
   "version": "0.12.3",
   "dependencies": {
-    "admin-lte": "github:ColorlibHQ/AdminLTE#v4-dev",
     "axios": "^0.21.1",
     "better-sqlite3": "^7.4.0",
     "commander": "^7.2.0",
