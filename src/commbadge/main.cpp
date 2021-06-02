@@ -33,12 +33,13 @@ Button2 btn1(BUTTON_1);
 Button2 btn2(BUTTON_2);
 Button2 btn3(BUTTON_3);
 
+
 // Callback when data is sent
 void OnDataSent(const uint8_t* mac, esp_now_send_status_t sendStatus)
 {
     if (sendStatus != ESP_NOW_SEND_SUCCESS)
     {
-        /// do something;
+        checkReaction();
     }
 }
 
@@ -46,18 +47,16 @@ void OnDataSent(const uint8_t* mac, esp_now_send_status_t sendStatus)
 void OnDataRecv(const uint8_t* mac, const uint8_t* buf, int count)
 {
     // copy to circular buffer
-
-    nowtalk_t data;
-    memcpy(data.mac, mac, 6);
-    data.code = buf[0];
-    memset(data.buf, 0, 255);
-    if (count > 1)
-    {
-        memcpy(data.buf, buf + 1, count - 1);
-    }
-    data.count = count - 1;
-    circbuf[write_idx] = data;
+    int idx = write_idx;
     write_idx = (write_idx + 1) % QUEUE_SIZE;
+    
+    memcpy(circbuf[idx].mac, mac, 6);
+    circbuf[idx].code = buf[0];
+    memset(circbuf[idx].buf, 0, 255);
+    if (count > 1) {
+        memcpy(circbuf[idx].buf, buf + 1, count - 1);
+    }
+    circbuf[idx].count = count - 1;
 }
 
 void handleCommand()
@@ -66,8 +65,7 @@ void handleCommand()
 
     if (inputString.equals("clear"))
     {
-        loadConfiguration(true);
-        ESP.restart();
+        ClearBadge( );
     }
     else if (inputString.equals("info"))
     {
@@ -112,36 +110,6 @@ void serialEvent()
         }
     }
 }
-void ClearBadge(Button2& b) {
-    loadConfiguration(true);
-    ESP.restart();
-}
-
-void RegisterBadge(Button2& b)
-{
-    if (config.registrationMode)
-    {
-        broadcast(NOWTALK_CLIENT_NEWPEER, "");
-        // config.registrationMode = true;
-        ShowMessage("Badge code:\n" + badgeID());
-    }
-    else if (config.masterAddress[0] != 0)
-    {
-        send_message(config.masterAddress, NOWTALK_CLIENT_START_CALL, "");
-    }
-    else
-    {
-        broadcast(NOWTALK_CLIENT_PING, "");
-    }
-}
-void longpress(Button2& btn) {
-    GoSleep();
-}
-
-void ping() {
-    Serial.println("ping");
-    if (config.wakeup) GoSleep();
-}
 
 void print_wakeup_reason() {
     esp_sleep_wakeup_cause_t wakeup_reason;
@@ -163,9 +131,9 @@ void setup()
 {
     // Init Serial Monitor
     Serial.begin(115200);
- //   Serial.println(wakeup);
+    //   Serial.println(wakeup);
     config.wakeup = wakeup;
- //   print_wakeup_reason();
+    //   print_wakeup_reason();
 
     if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED))
     {
@@ -208,37 +176,40 @@ void setup()
         Serial.println(WiFi.macAddress());
         Serial.print(F("* WiFi Channel: "));
         Serial.println(WiFi.channel());
-
-        config.lastTime = millis() - (config.timerDelay + 10);
         delay(2500);
-        
-        myEvents.free(0);
-        myEvents.timerRepeat(10000, ping);
     }
 
     if (esp_now_init() != 0) {
         ShowMessage("Error initializing ESP-NOW", 'E');
         return;
     }
-    
+
     esp_now_register_send_cb(OnDataSent);
     esp_now_register_recv_cb(OnDataRecv);
 
-    btn1.setClickHandler(RegisterBadge);
-    btn2.setClickHandler(RegisterBadge);
-    btn3.setClickHandler(RegisterBadge);
-    
-    btn3.setTripleClickHandler(ClearBadge);
-    btn3.setLongClickDetectedHandler(longpress);
+    btn1.setClickHandler(OnRegisterBadge);
+    btn2.setClickHandler(OnRegisterBadge);
+    btn3.setClickHandler(OnRegisterBadge);
+
+    btn3.setTripleClickHandler(OnClearBadge);
+    btn3.setLongClickDetectedHandler(OnLongPress);
     btn3.setLongClickTime(1000);
+    
     config.wakeup = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
     if (!config.wakeup) {
+        myEvents.free(0);
         if (config.registrationMode) {
             ShowMessage("New Badge!\n\nPress Enter Button\nto register...", '!');
+
+            myEvents.timerOnce(1, OnPing);
+            myEvents.disable(0);
         }
         else {
             ShowMessage("READY", '*');
+            uint32_t i = config.timerDelay * (config.masterAddress[0] == 0) ? 5 : 1;
+            myEvents.timerOnce(i, OnPing);
         }
+        config.sleepID = myEvents.timerOnce(config.timerSleep, OnGoSleep);
     }
 }
 
@@ -260,22 +231,7 @@ void loop()
         handlePackage(espnow.mac, espnow.code, espnow.buf, espnow.count);
         read_idx = (read_idx + 1) % QUEUE_SIZE;
     }
-    if (!config.registrationMode)
-    {
-        if ((millis() - config.lastTime) > config.timerDelay * (config.masterAddress[0] == 0 ? 5 : 1))
-        {
-            if (config.masterAddress[0] == 0)
-            {
-                Serial.println("*  Search master");
-                broadcast(0x01, "");
-            }
-            else
-            {
-                send_message(config.masterAddress, 0x01, "");
-            }
-            config.lastTime = millis();
-        }
-    }
+
     if (stringComplete)
     {
 

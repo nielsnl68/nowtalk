@@ -7,19 +7,33 @@
 #include "nowtalk.h"
 #include "display.h"
 
+#include"time.h"
 
 // #include "CRC.h"
- 
+tm mytm;
 
-const char *tail;
+tm createTM(const char* str)
+{
+    tm mytm;
+    int Year, Month, Day, Hour, Minute, Second;
+    sscanf(str, "%d-%d-%dT%d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
+    mytm.tm_year = Year;
+    mytm.tm_mon = Month;
+    mytm.tm_mday = Day;
+    mytm.tm_hour = Hour;
+    mytm.tm_min = Minute;
+    mytm.tm_sec = Second;
+    return mytm;
+}
 
-void handlePackage(const uint8_t mac[6], const uint8_t action, const char *info, size_t count)
+
+void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info, size_t count)
 {
     String test;
     String split = String(info);
     char msg[255];
 
-    debug('>', mac,  action,  info);
+    debug('>', mac, action, info);
 
     switch (action)
     {
@@ -34,23 +48,39 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char *info,
         bool isNewMaster = (config.masterAddress[0] == 0);
         if (isNewMaster)
         {
-            sprintf(msg, "Switchboard at %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-            ShowMessage(msg,'*');
+            if (!config.wakeup) {
+                sprintf(msg, "Switchboard at:\n%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                ShowMessage(msg, '*');
+            }
+            memcpy(config.masterAddress, mac, 6);
+            add_peer(mac);
+            myEvents.timerOnce(config.timerDelay, OnPing);
+            if (config.wakeup) {
+                GoSleep();
+            }
         }
-        else
-        {
-            esp_now_del_peer(config.masterAddress);
+        if (split.length() > 0) {
+            String name = getValue(split, '~', 0);
+            strlcpy(config.switchboard, name.c_str(), sizeof(config.switchboard)); // <- destination's capacity
+
+            String date = getValue(split, '~', 1);
         }
-        memcpy(config.masterAddress, mac, 6);
-        add_peer(mac);
+        /*
+        configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+        tm xtm = createTM(date.c_str());
+        setTime(makeTime(xtm))
+        */
+        config.heartbeat = 0;
+        
+
     }
     break;
 
     case NOWTALK_SERVER_REQUEST_DETAILS:
     {
         add_peer(mac);
-        if ((strcmp(config.masterIP, "<None>") != 0) && (strcmp(config.userName, "<None>") != 0)){
-            send_message(mac, NOWTALK_CLIENT_DETAILS, String(config.masterIP) +"~" + String(config.userName));
+        if ((strcmp(config.masterIP, "<None>") != 0) && (strcmp(config.userName, "<None>") != 0)) {
+            send_message(mac, NOWTALK_CLIENT_DETAILS, String(config.masterIP) + "~" + String(config.userName));
         }
         esp_now_del_peer(mac);
     }
@@ -61,26 +91,28 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char *info,
         add_peer(mac);
         if (config.registrationMode)
         {
-            String checkID = getValue(split,'~',0);
+            String checkID = getValue(split, '~', 0);
             String IP = getValue(split, '~', 1);
             String name = getValue(split, '~', 2);
             String network = getValue(split, '~', 3);
-     //       uint16_t crc = getValue(split, '~', 4).toInt();
+            //       uint16_t crc = getValue(split, '~', 4).toInt();
             test = "nowTalkSrv!" + checkID + "~" + IP + "~" + name + "~" + network;
             //            uint16_t checkCrc crc16((uint8_t *)test.c_str(), test.length, 0x1021, 0, 0, false, false);
             if (checkID == badgeID())
             {                                                                  //crc == checkCrc &&
                 strlcpy(config.masterIP, IP.c_str(), sizeof(config.masterIP)); // <- destination's capacity
-                strlcpy(config.userName,name.c_str(), sizeof(config.userName)); // <- destination's capacity
-                strlcpy(config.hostname, network.c_str(), sizeof(config.hostname)); // <- destination's capacity
+                strlcpy(config.userName, name.c_str(), sizeof(config.userName)); // <- destination's capacity
+                strlcpy(config.switchboard, network.c_str(), sizeof(config.switchboard)); // <- destination's capacity
                 memcpy(config.masterAddress, mac, 6);
                 saveConfiguration();
                 send_message(mac, NOWTALK_CLIENT_ACK, "");
+                ShowMessage('*', "Switchboard:\n%s\n\nCallname: %s", config.switchboard, config.userName);
                 config.registrationMode = false;
                 return;
-            }else {
+            }            
+else {
                 send_message(mac, NOWTALK_CLIENT_NACK, "");
-                ShowMessage("Wrong Badge Id!\nPress Enter Button.",'!');
+                ShowMessage("Wrong Badge Id!\nPress Enter Button.", '!');
             }
         }
         esp_now_del_peer(mac);
@@ -97,7 +129,8 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char *info,
             send_message(mac, NOWTALK_CLIENT_ACK, "");
             sprintf(msg, "Update IP to: \n%s", config.masterIP);
             ShowMessage(msg, '*');
-        } else {
+        }
+        else {
             send_message(mac, NOWTALK_CLIENT_NACK, "");
         }
     }
@@ -111,16 +144,17 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char *info,
             strlcpy(config.userName, NewName.c_str(), sizeof(config.userName)); // <- destination's capacity
             send_message(mac, NOWTALK_CLIENT_ACK, "");
             sprintf(msg, "Update Name to: \n%s", config.userName);
-            ShowMessage(msg,'*');
-        }  else {
+            ShowMessage(msg, '*');
+        }
+        else {
             send_message(mac, NOWTALK_CLIENT_NACK, "");
         }
     }
     break;
     default:
         sprintf(msg, "Unknown msg from: \n%02x%02x%02x%02x%02x%02x\n [%02x] %s",
-                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], action, info);
-        ShowMessage(msg,'!');
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], action, info);
+        ShowMessage(msg, '!');
     }
 }
 

@@ -63,7 +63,15 @@ typedef struct {
     uint8_t isSaveable: 1; // save event in deep sleep mode.
 } AlarmMode_t;
 
-typedef void (*OnTick_t)();  // alarm callback function typedef
+typedef uint8_t AlarmID_t;
+typedef AlarmID_t AlarmId;  // Arduino friendly name
+
+#ifdef ARDUINO_ARCH_ESP8266
+#include <functional>
+typedef std::function<void()> OnTick_t;
+#else
+typedef void (*OnTick_t)(AlarmID_t ID);  // alarm callback function typedef
+#endif
 
 typedef struct
 {
@@ -96,21 +104,13 @@ typedef enum {
 #define dtIsAlarm(_type_)  (_type_ >= dtExplicitAlarm && _type_ < dtLastAlarmType)
 #define dtUseAbsoluteValue(_type_)  (_type_ == dtTimer || _type_ == dtExplicitAlarm)
 
-typedef uint8_t AlarmID_t;
-typedef AlarmID_t AlarmId;  // Arduino friendly name
+
 
 
 //#define AlarmHMS(_hr_, _min_, _sec_) (_hr_ * SECS_PER_HOUR + _min_ * SECS_PER_MIN + _sec_)
 //Hack to get timezone and stuff working
 
 
-
-#ifdef ARDUINO_ARCH_ESP8266
-#include <functional>
-typedef std::function<void()> OnTick_t;
-#else
-typedef void (*OnTick_t)();  // alarm callback function typedef
-#endif
 
 // class containing the collection of alarms
 class TimeEventsClass

@@ -123,4 +123,76 @@ String IpAddress2String(const IPAddress& ipAddress)
         String(ipAddress[3]);
 }
 
+void OnPing(AlarmID_t ID);
+
+void ClearBadge() {
+    ShowMessage("Okey,\n Clearing badge and\nreboot.", '!');
+    delay(3000);
+    if (config.TFTActive) {
+        ledcWrite(TFT_BL, 0);
+        tft.writecommand(TFT_DISPOFF);
+        tft.writecommand(TFT_SLPIN);
+    }
+
+    loadConfiguration(true);
+    ESP.restart();
+}
+
+void checkReaction() {
+    if (config.heartbeat > 3) {
+        esp_now_del_peer(config.masterAddress);
+        config.masterAddress[0] = 0x00;
+    }
+    uint32_t i = config.timerDelay * (config.masterAddress[0] == 0) ? 5 : 1;
+    myEvents.timerOnce(i, OnPing);
+}
+
+void OnClearBadge(Button2& b) {
+    ClearBadge();
+}
+
+void OnRegisterBadge(Button2& b)
+{
+    if (config.registrationMode)
+    {
+        broadcast(NOWTALK_CLIENT_NEWPEER, "");
+        // config.registrationMode = true;
+        ShowMessage("Badge code:\n" + badgeID());
+    }
+    else if (config.masterAddress[0] != 0)
+    {
+        send_message(config.masterAddress, NOWTALK_CLIENT_START_CALL, "");
+    }
+    else
+    {
+        broadcast(NOWTALK_CLIENT_PING, "");
+    }
+}
+void OnLongPress(Button2& btn) {
+    GoSleep();
+}
+
+void OnNoReaction(AlarmID_t ID) {
+    checkReaction();
+    if (config.wakeup) GoSleep();
+}
+
+void OnGoSleep(AlarmID_t ID) {
+    GoSleep();
+}
+
+void OnPing(AlarmID_t ID) {
+    if (config.masterAddress[0] == 0)
+    {
+        Serial.println("*  Search SwitchBoard");
+        broadcast(0x01, "");
+    }
+    else
+    {
+        send_message(config.masterAddress, 0x01, "");
+    }
+    config.timeoutID = myEvents.timerOnce(150, OnNoReaction);
+}
+
+
 #endif

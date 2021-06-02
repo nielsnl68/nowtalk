@@ -165,7 +165,7 @@ void TimeEventsClass::loop()
                     updateNextTrigger(servicedAlarmId);
                 }
                 if (TickHandler != NULL) {
-                    TickHandler();     // call the handler
+                    TickHandler(servicedAlarmId);     // call the handler
                 }
             }
         }

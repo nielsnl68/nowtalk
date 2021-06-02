@@ -64,17 +64,21 @@ struct config_t
     boolean wakeup = false;
     unsigned long lastTime = 0;
     unsigned long timerDelay = 30000; // send readings timer
-    unsigned long eventInterval = 5000;
+    unsigned long timerSleep  = 90000;
     bool registrationMode = false;
     char masterIP[40] = "<None>";
     char userName[64] = "<None>";
     uint8_t masterAddress[6] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     byte channel = 0;
-    char hostname[32] = "";
+    char switchboard[32] = "";
     boolean TFTActive = false;
     int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
     int sprVolume = 40;
-   
+    int sleepID = -1;
+    int heartbeatID = -1;
+    int timeoutID = -1;
+    short heartbeat = 0;
+
 };
 const char* configFile = "/config.json"; // <- SD library uses 8.3 filenames
 
@@ -192,31 +196,30 @@ void loadConfiguration(bool clear = false)
 {
     if (clear)
         SPIFFS.remove(configFile);
-    
-    // memset(*config, 0, sizeof(config));
-    // Open file for reading
-    fs::File file = SPIFFS.open(configFile);
-
     // Allocate a temporary JsonDocument
     // Don't forget to change the capacity to match your requirements.
     // Use arduinojson.org/v6/assistant to compute the capacity.
     StaticJsonDocument<524> doc;
+    
+    // memset(*config, 0, sizeof(config));
+    // Open file for reading
+    if (SPIFFS.exists(configFile)) {
+        fs::File file = SPIFFS.open(configFile);
+        deserializeJson(doc, file);
+        file.close();
+    }
 
-    // Deserialize the JSON document
-    DeserializationError error = deserializeJson(doc, file);
-    if (error)
-        Serial.println(F("Failed to read file, using default configuration"));
-    file.close();
     // Copy values from the JsonDocument to the Config
     config.channel = doc["channel"] | 0;
     //config.port = doc["port"] | 2731;
-    strlcpy(config.hostname, doc["hostname"] | "", sizeof(config.hostname)); // <- destination's capacity
+    strlcpy(config.switchboard, doc["switchboard"] | "", sizeof(config.switchboard)); // <- destination's capacity
 
     config.timerDelay = doc["timerDelay"] | 30000;      // send readings timer
-    config.eventInterval = doc["eventInterval"] | 5000; //EVENT_INTERVAL_MS
+    config.timerSleep = doc["timerSleep"] |  90000; //EVENT_INTERVAL_MS
     config.ledBacklight = doc["ledBacklight"] | 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
     config.sprVolume = doc["sprVolume"] | 40;
-
+    config.heartbeat = doc["heartbeat"] | 0;
+    
 
     strlcpy(config.masterIP, doc["masterIP"] | "<None>", sizeof(config.masterIP)); // <- destination's capacity
     strlcpy(config.userName, doc["userName"] | "<None>", sizeof(config.userName)); // <- destination's capacity
@@ -234,9 +237,7 @@ void loadConfiguration(bool clear = false)
         alarms[id].Mode.isEnabled = elem["mode_isEnabled"]; 
         alarms[id].Mode.isOneShot = elem["mode_isOneShot"]; 
         alarms[id].onTickHandler = (OnTick_t)elem["trigger"].as<uint32_t>();
-       // Serial.printf("%lli, %lli ", alarms[id].nextTrigger, myEvents.timeNow());
         myEvents.updateNextTrigger(id);
-       // Serial.printf("%lli, %lli\n", alarms[id].nextTrigger, alarms[id].nextTrigger - myEvents.timeNow());
     }
 }
 
@@ -247,9 +248,8 @@ void saveConfiguration()
     SPIFFS.remove(configFile);
 
      fs::File file = SPIFFS.open(configFile, FILE_WRITE);
-    if (!file)
-    {
-        Serial.println(F("Failed to create file"));
+    if (!file)    {
+        Serial.println(F("E Failed to create file"));
         return;
     }
 
@@ -261,10 +261,10 @@ void saveConfiguration()
     // Copy values from the JsonDocument to the Config
     doc["channel"] = config.channel;
     //doc["port"] = config.port;
-    doc["hostname"] = config.hostname;
+    doc["switchboard"] = config.switchboard;
 
     doc["timerDelay"] = config.timerDelay;       // send readings timer
-    doc["eventInterval"] = config.eventInterval; //EVENT_INTERVAL_MS
+    doc["timerSleep"] = config.timerSleep; //EVENT_INTERVAL_MS
 
     doc["masterIP"] = config.masterIP;
     doc["userName"] = config.userName;
