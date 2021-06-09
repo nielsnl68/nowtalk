@@ -2,9 +2,8 @@
 /*jshint esversion: 10 */
 "use strict";
 
-const http = require("http");
+const http2 = require("http2");
 const fsx = require('fs');
-const { parse } = require('querystring');
 const process = require('process');
 const socketio = require('socket.io');
 
@@ -13,6 +12,20 @@ const {
     userLeave,
     userCount
 } = require('./utils/users');
+
+const {
+    HTTP2_HEADER_PATH,
+    HTTP2_HEADER_METHOD,
+    HTTP_STATUS_NOT_FOUND,
+    HTTP_STATUS_INTERNAL_SERVER_ERROR
+} = http2.constants;
+
+const options = {
+    key: fsx.readFileSync('https/selfsigned.key'),
+    cert: fsx.readFileSync('https/selfsigned.crt')
+}
+
+
 
 const MAX_MSGS = 100;
 
@@ -28,7 +41,7 @@ class NowTalkHttps {
         this.onUpdateBadges = this.onUpdateBadges.bind(this);
         this.requestListener = this.requestListener.bind(this);
 
-        this.server = http.createServer(this.requestListener);
+        this.server =  http2.createSecureServer(options, this.requestListener);
         this.io = socketio(this.server);
 
         this.io.on('connection', socket => {

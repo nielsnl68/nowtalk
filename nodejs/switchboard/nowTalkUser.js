@@ -3,10 +3,8 @@
 "use strict";
 
 const events = require('events');
-const sqlite3 = require('sqlite3');
-const crc16 = require("node-crc16");
-const process = require('process');
-const { hrtime, exit } = require('process');
+const { hrtime} = require('process');
+const text2wav = require('text2wav');
 
 const NOWTALK_CLIENT_PING = 0x01;
 const NOWTALK_SERVER_PONG = 0x02;
@@ -15,9 +13,11 @@ const NOWTALK_CLIENT_DETAILS = 0x04;
 const NOWTALK_CLIENT_NEWPEER = 0x05;
 
 const NOWTALK_SERVER_ACCEPT = 0x07;
+const NOWTALK_SERVER_REJECT  = 0x08;
 
 const NOWTALK_SERVER_NEW_NAME = 0x0d;
 const NOWTALK_SERVER_NEW_IP = 0x0e;
+const NOWTALK_SERVER_NEW_UPDATE = 0x0f;
 
 const NOWTALK_CLIENT_ACK = 0x10;
 const NOWTALK_CLIENT_NACK = 0x11;
@@ -31,13 +31,10 @@ const NOWTALK_CLIENT_REQUEST = 0x37;
 const NOWTALK_CLIENT_RECEIVE = 0x38;
 const NOWTALK_CLIENT_CLOSED = 0x39;
 
-const NOWTALK_CLIENT_STREAM = 0x3df;
+const NOWTALK_CLIENT_STREAM = 0x3f;
 
 const NOWTALK_BRIDGE_RESEND = 0x77;
 
-const NOWTALK_SERVER_UPGRADE = 0xe0;
-const NOWTALK_SERVER_SENDFILE = 0xe1;
-const NOWTALK_CLIENT_RECEIVED = 0xe2;
 
 const NOWTALK_CLIENT_HELPSOS = 0xff;
 
@@ -47,9 +44,10 @@ const NOWTALK_STATUS_GUEST = 0x02;
 const NOWTALK_STATUS_BUSY   = 0x04;
 const NOWTALK_STATUS_EXTERN = 0x08;
 
-const NOWTALK_PEER_MEMBER = 0x10;
-const NOWTALK_PEER_FRIEND = 0x20;
-const NOWTALK_PEER_BLOCKED = 0x80;
+const NOWTALK_BADGE_MEMBER   = 0x10;
+const NOWTALK_BADGE_FRIEND     = 0x20;
+const NOWTALK_BADGE_UPDATE    = 0x40;
+const NOWTALK_BADGE_BLOCKED    = 0x80;
 
 
 class NowTalkUser extends events.EventEmitter {
@@ -57,13 +55,15 @@ class NowTalkUser extends events.EventEmitter {
         super();
         this.main = main;
         this.fillInfo(userInfo);
-        this.timestamp = this.isStatus(0x10)? 0n : process.hrtime.bigint();
+        this.timestamp = this.isStatus(0x10)? 0n : hrtime.bigint();
         this.externelIP = "";
         this.realName = "";
         this.lastMessage = null;
         this._newIP = null;
         this._newName = null;
+        this._newUpdate = null;
         this.isStarted = false;
+        this.queue = [];
     }
     
     fillInfo(userInfo) {
@@ -74,8 +74,6 @@ class NowTalkUser extends events.EventEmitter {
         this.name = userInfo.name;
         this.badgeID = userInfo.key || "";
     }
-
-
 
     start() {
         if (!this.isStarted) {
@@ -91,43 +89,24 @@ class NowTalkUser extends events.EventEmitter {
         });
     }
 
-    
-    setName(name) {
-        if (!this.isStatus(0x04)) {
-            if (this._newName !== null) throw "Name is already bing changed";
-            this._newName = name;
-        } else {
-            this.name = name;
-        }
-    }
-
-    setIP(ip) {
-        if (!this.isStatus(0x04)) {
-            if (this._newIP !== null) throw "IP is already bing changed";
-            this._newIP = ip;
-        } else {
-            this.ip = ip;
-        }
-    }
-
-    setStatus(status, remove) {
+    setStatus(status,add = null) {
         var x = this.status;
         if (status > 0x0f) {
-            if (typeof remove === "undefined") {
+             if (add === null) {
                 this.status = (this.status & 0x0f) | (status & 0xf0);
-            } else  if (remove) {
-                this.status = this.status ^ (status & 0xf0);
-            } else {
+            } else if (add) {
                 this.status = (this.status) | (status & 0xf0);
+            } else {
+                this.status = this.status ^ (status & 0xf0);
             }
             this.main.updateBadge(this);
         } else {
-            if (typeof remove === "undefined") {
+            if (add === null) {
                 this.status = (this.status & 0xf0) | (status & 0x0f);
-            } else if (remove) {
-                this.status = this.status ^ (status & 0x0f);
-            } else {
+            } else if (add) {
                 this.status = (this.status) | (status & 0x0f);
+            } else {
+                this.status = this.status ^ (status & 0x0f);
             }
         }
  //       console.info('status', status > 0x0f, x.toString(16), this.status.toString(16), status.toString(16), remove);
@@ -142,18 +121,18 @@ class NowTalkUser extends events.EventEmitter {
         let ip = this.ip;
         
         if (useHexMac) {
-            if ((ip == this.main.config.IP || "") && this.isStatus(0x10)) ip = '';
+            if ((ip == this.main.config.externelIP) && this.isStatus(0x10)) ip = '';
             if (this.isStatus(0x08)) ip = this.externelIP;
-            let time = parseInt(Number(hrtime.bigint() - this.timestamp) / (this.main.config.badgeTimeout * 10000000));
+            time = parseInt(Number(hrtime.bigint() - this.timestamp) / (this.main.config.badgeTimeout * 10000000));
             //   console.info(this.status.toString(16), time);
             if (time < 0) time = 0;
             if (time > 100) {
                 time = 100;
                 if (this.isStatus(0x01)) {
-                    this.setStatus(0x01, true);
+                    this.setStatus(0x01, false);
                     if (this.isStatus(0x02)) this.updateTimer();
                 } else if (this.isStatus(0x02)) {
-                    this.setStatus(0x02, true);
+                    this.setStatus(0x02, false);
                 }
                 if ((this.status == 0x00) || (this.status == 0x80)) {
                     this.main.unPeer(this.mac);
@@ -179,16 +158,18 @@ class NowTalkUser extends events.EventEmitter {
 */
 
     updateTimer() {
-        this.timestamp = process.hrtime.bigint();
+        this.timestamp = hrtime.bigint();
     }
 
     sendMessage(code, msg) {
-        this.lastMessage = { 'code': code, 'msg': msg };
+        this.lastMessage = { 'code': code, 'msg': msg, 'count': 0 };
         this.main.sendMessage( this.mac, this.lastMessage.code, this.lastMessage.msg);
     }
+
     webMessage(kind, msg) {
         this.main.web.addMessage(kind, msg);
     }
+
     RegisterBadge(info, localIP) {
         this.key    = info[0];
         this.name = info[1];
@@ -197,14 +178,51 @@ class NowTalkUser extends events.EventEmitter {
     }
 
     speak(text) {
-        
+        text2wav(text).then((data) => {
+            let pos = 0;
+            let size = data.length;
+            this.sendMessage(0x3d, "wav");
+            while (pos < size) {
+
+                let block = Math.min(60, size - pos);
+                let array = data.slice(pos, pos + block);
+                this.sendMessage(0x3e, array);
+            }
+            this.sendMessage(0x3f);
+
+        });
     }
 
-    onResendRequest(nsg) {
-        if (this.lastMessage != null) {
-            this.main.sendMessage(  this.mac, this.lastMessage.code, this.lastMessage.msg);
-            return true;
+    checkUpdates() {
+        const checkResult = function () {
+            this.once("handle_h10", this.onAckChange);
+            this.once("handle_h11", this.onNackChange);
+        };
+        if (this._newIP !== null) {
+            checkResult();
+            this.sendMessage(0x0e, this.ip + "~" + this._newIP);
+        } else if (this._newName !== null) {
+            checkResult();
+            this.sendMessage(0x0d, this.name + "~" + this._newName);
+        } else if (this._newUpdate !== null) {
+            checkResult();
+            this.sendMessage(0x0f, this._newUpdate);
+        } else {
+            return false;
         }
+        this.setStatus(0x04, true);
+        return true;
+    }
+ 
+    onResendRequest(nsg) {
+        if (this.lastMessage != null && this.lastMessage.count < 5) {
+            this.main.sendMessage(this.mac, this.lastMessage.code, this.lastMessage.msg);
+            this.lastMessage.count++;
+            return true;
+        } else if (this.lastMessage.count >= 5) {
+            this.webMessage("danger", `Badge ${this.badgeID} does not response anymore`);
+        }
+        this.lastMessage = null;
         return false;
     }
 
@@ -214,31 +232,25 @@ class NowTalkUser extends events.EventEmitter {
         this.off("handle_h11", this.onNackChange);
         this.off("handle_h30", this.onCallRequest);
         if (this.isStatus(0x80)) {  // user blocked
-           this.webMessage('error',"Blocked user: " + this._mac + " ignored.", this);
+            this.webMessage('error', `Badge ${this.badgeID} is blocked and ignored.`, this);
             this.main.unPeer( this.mac);
             return true;
         } else if (this.status == 0x00) {
-            this.webMessage('warning',"Unknown user: " + msg._mac + ",  request  info.");
+            this.webMessage('warning', "Unknown badge: " + msg._mac + ",  requesting  info.");
             this.on("handle_h04", this.onGuestUser);
             this.sendMessage(0x03);
             return true;
         } else {
-            this.updateTimer();
-            if (this._newIP !== null) {
-                this.sendMessage(0x0e, this.ip + "~" + this._newIP);
-                this.once("handle_h10", this.onAckChange)
-            } else if (this._newName !== null) {
-                this.sendMessage(0x0d, this.name + "~" + this._newName);
-                this.once("handle_h10", this.onAckChange)
-            } else {
+            this.updateTimer();            
+            if ( !this.checkUpdates()) {
                 if (this.isStatus(0x01)) {
                     this.sendMessage(0x02);
                 } else {
-                    this.sendMessage(0x02, this.main.config.switchboardName + "~" + Date.now().toJSON());
+                    this.sendMessage(0x02, this.main.config.switchboardName + "~" + (new Date()).toJSON());
                 }
                 this.off("handle_h30", this.onCallRequest);
+                this.setStatus(0x01, true); 
             }
-            if (this.isStatus(0x02)) { this.setStatus(0x03); } else { this.setStatus(0x01); }
             return true;
         }
     }
@@ -258,7 +270,7 @@ class NowTalkUser extends events.EventEmitter {
             if (this.isStatus(0x01)) {
                 this.sendMessage(0x02);
             } else {
-                this.sendMessage(0x02, this.main.config.switchboardName + "~" + Date.now().toJSON());
+                this.sendMessage(0x02, this.main.config.switchboardName + "~" + (new Date()).toJSON());
             }
             this.setStatus(0x03);
             this.updateTimer();
@@ -276,20 +288,18 @@ class NowTalkUser extends events.EventEmitter {
         if (this._newIP !== null) {
             this.ip = this._newIP;
             this._newIP = null;
-            this.updateBadge();
-            if (this._newName !== null) {
-                this.sendMessage(0x0d, this.name + "\0x1f" + this._newName);
-                this.once("handle_h10", this.onAckChange);
-                return true;
-            }
-        }
-        if (this._newName !== null) {
+        } else if (this._newName !== null) {
             this.name = this._newName;
             this._newName = null;
-            this.updateBadge();
+        } else if (this._newUpdate !== null) {
+            this._newUpdate = null;
+        }    
+        this.updateBadge();
+        if (!this.checkUpdates()) {
+            this.sendMessage(0x02, this.main.config.switchboardName + "~" + (new Date()).toJSON());
+            this.on("handle_h30", this.onCallRequest);
+            this.setStatus(0x01, true);
         }
-        this.sendMessage(0x02, this.main.config.switchboardName + "~" + Date.now().toJSON());
-        this.on("handle_h30", this.onCallRequest);
     }
 
     onCallRequest(msg) {

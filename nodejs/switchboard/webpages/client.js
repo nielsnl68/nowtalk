@@ -1,41 +1,34 @@
+
+/*jshint esversion: 10 */
 $(document).ready(function () {
-    'use strict'
+    'use strict';
 
     //const newbadgeAdd = document.getElementById('newbadgeAdd');
     let table = $("#listBadges");
     let msgBody = $("#msgBody");
 
     const socket = io();
-    var _errormsg = $("<div class='alert alert-danger m-1 p-1  text-center small'  role='alert'>Server has been disconnected.</div>");
-    $("#main").prepend(_errormsg);
     $("#newBadgeAlert").hide();
     $("#editBadgeAlert").hide();
 
     // client-side
     socket.on("connect", () => {
-        if (_errormsg != null) {
-            _errormsg.hide();
-            $("#main").remove(_errormsg);
-            _errormsg = null;
-        }
-        socket.emit('newBadge', false);
+        callAddMessage("_connect", "Connected to switchboard");
     });
 
     socket.on("disconnect", (reason) => {
-        if (reason === "io server disconnect") {
-            // the disconnection was initiated by the server, you need to reconnect manually
-            socket.connect();
-        }
-        if (_errormsg != null) {
-            _errormsg = $("<div class='alert alert-danger m-1 p-1  text-center small'  role='alert'>Server has been disconnected.</div>");
-            $("#main").prepend(_errormsg);
-        }
+        callAddMessage("_disconnect", "Server has been disconnected. "+reason);
+    });
+
+    socket.on("connect_error", (reason) => {
+//        callAddMessage("_error", "A connect_error. ");
+  //      console.error(reason);
     });
 
     // Get room and users
     socket.on('config', (obj) => {
         $("#sts_switchboardName").text(obj.switchboardName);
-        $("#sts_version").text(obj.version + "/" + obj.bridge.version);
+        $("#sts_version").text(obj.version + "/" + (obj.bridge.version||"<None>"));
         $("#sts_externIP").text(obj.externelIP || "<None>");
         $("#sts_mac").text(obj.bridge.mac);
         $("#sts_channel").text(obj.bridge.channel);
@@ -43,18 +36,15 @@ $(document).ready(function () {
     });
 
     socket.on('newBadge', (obj) => {
-        $("#listBadges tr.table-info").removeClass('table-info');
-        $("#editBadgeAlert").hide();
-
         if (obj === false) {
-            $("#newBadgeAlert").hide();;
+            $("#newBadgeAlert").hide();
             $("#newBadgeConfirm").hide();
             $("#newbadgeYes").off('click');
             $("#newbadgeClose").off('click');
             $("#newBadgeForm").off('submit');
             return;
         }
-
+        $("#newBadgeAlert").addClass('show');
         $("#newBadgeConfirm").show();
         $("#newBadgeForm").hide();
         $("#newBadgeAlert").show();
@@ -76,12 +66,12 @@ $(document).ready(function () {
             $("#username").val("");
             $("#newBadgeForm").on("submit", function (event) {
                 let form = document.getElementById("newBadgeForm");
-                event.preventDefault()
-                event.stopPropagation()
+                event.preventDefault();
+                event.stopPropagation();
                 if (!form.checkValidity()) {
                     return;
                 }
-                form.classList.add('was-validated')
+                form.classList.add('was-validated');
                 socket.emit('newBadge',
                     {
                         badgeid: $("#badgeid").val(),
@@ -180,7 +170,6 @@ $(document).ready(function () {
             let x = item.time;
             row.find(".progress-bar").attr("aria-valuenow", x).css("width", x+"%");
             
-            console.info(row.find('[data-action="disable"]'));
             row.find('[data-action="friend"]').prop('disabled', (item.status & 0x10) !== 0).attr('data-status', (item.status & 0x20) !== 0);
             row.find("[data-action='name']").prop('disabled', (item.status & 0x30) === 0).attr('data-name', item.name);
             row.find('[data-action="disable"]').attr('data-status', (item.status & 0x80) !== 0);
@@ -206,6 +195,16 @@ $(document).ready(function () {
             case 'send':
                 row.append("<div class='col-2'></div>");
                 _msg.addClass("text-end col-10 mt-1 px-1 text-primary rounded-start alert-secondary ");
+                break;
+            
+            case '_connect':
+                _msg.addClass("col-12 px-1 mt-1 text-success border alert-success  ");
+                break;
+            case '_disconnect':
+                _msg.addClass("col-12 px-1 mt-1 text-danger border alert-danger  ");
+                break;
+            case '_error':
+                _msg.addClass("col-12 px-1 mt-1 text-warning border alert-warning  ");
                 break;
             default:
                 _msg.addClass("col-12 text-" + kind);
@@ -264,6 +263,6 @@ $(document).ready(function () {
    //     console.info('contextmenu clicked');
         $(this).trigger('click');
         return false;
-    })
+    });
 
 });

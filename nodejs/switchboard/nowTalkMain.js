@@ -1,5 +1,3 @@
-
-
 /*jshint esversion: 10 */
 "use strict";
 
@@ -10,11 +8,14 @@ const InterByteTimeout = require('@serialport/parser-inter-byte-timeout');
 const got = require('axios');
 const crc16 = require('node-crc16');
 
+const fs = require('fs');
+const md5File = require('md5-file');
+
 const nowTalkUser = require('./nowTalkUser.js');
 const nowTalkHttps = require('./nowTalkHttps.js');
 const { exit } = require('process');
 
-const ignoreCodes = [0x01, 0x02];
+const ignoreCodes = [];// 0x01, 0x02, 0x77, 0x04, 0x10, 0x11
 
 
 
@@ -25,6 +26,8 @@ class NowTalkMain extends events.EventEmitter {
         this.users = {};
         this.loadBadges();
         this.newBadgeInUse = false;
+        this.updateRunning = false;
+        this.closePort = false;
 
         if (typeof config.externelIP === "undefined" || config.externelIP == '' || config.dynamicExtIP == "true") {
             this.onRequestExternalIP();
@@ -40,6 +43,7 @@ class NowTalkMain extends events.EventEmitter {
 
 
         this.onPortOpened = this.onPortOpened.bind(this);
+        this.onPortClosed = this.onPortClosed.bind(this);
         this.onParserData = this.onParserData.bind(this);
         this.onHandle_Ping = this.onHandle_Ping.bind(this);
         this.onHandle_NewDevice = this.onHandle_NewDevice.bind(this);
@@ -71,6 +75,7 @@ class NowTalkMain extends events.EventEmitter {
         for (const [key, value] of Object.entries(this.users)) {
             value.start();
         }
+        this.checkFirmware();
     }
 
     closeSwitchBoard() {
@@ -148,7 +153,10 @@ class NowTalkMain extends events.EventEmitter {
         }
         if (isNew && (info === false || this.config.allowGuests)) {
             if (info === false) info = {};
-            user = new nowTalkUser({ mac: mac, status: info.status || 0x00, ip: info.ip || "", name: info.name || "" , key: info.key}, main);
+            user = new nowTalkUser({
+                mac: mac, status: info.status || 0x00,
+                ip: info.ip || "", name: info.name || "", key: info.key
+            }, main);
         }
         if (typeof user !== "undefined") {
             this.users[_mac] = user;
@@ -157,52 +165,85 @@ class NowTalkMain extends events.EventEmitter {
         return user;
     }
 
+    checkFirmware() {
+        const fileName = "firmware/nowTalkBadge.bin";
+        const bridgeName = "firmware/nowTalkBridge.bin";
+        const BUFFER_SIZE = 64;
+        const main = this;
+        if (!fs.existsSync(fileName)) return;
+
+        let updatetimer = -1;
+        let onUpdateBridge;
+        onUpdateBridge = function () {
+
+        };
+
+        fs.watch(bridgeName, { persistent: true }, (eventType, filename) => {
+
+            console.log("\nThe file", bridgeName, "was :", eventType);
+            if (!this.updateRunning) {
+                this.updateRunning = true;
+                if (updatetimer === -1) {
+                    setTimeout(onUpdateBridge, 1250);
+                } else {
+                    updatetimer.refresh();
+                }
+            }
+        });
+        fs.watch(fileName, { persistent: true }, (eventType, filename) => {
+            console.log("\nThe file", filename, "was modified!");
+            console.log("The type of change was:", eventType);
+            for (const badge of Object.values(main.users)) {
+                badge.setStatus(0x40, true);
+            }
+        });
+    }
+
+    _reconnect() {
+        if (!this.serialPort.isOpen && !this.closePort) {
+            this.serialPort.open();
+        }
+    };
 
     connect() {
-        const serialPort = new SerialPort(this.config.commport, { baudRate: this.config.baudrate, autoOpen: false });
-        this.parser = serialPort.pipe(new InterByteTimeout({ interval: 30 }));
-        const reconnect = function () {
-            if (!serialPort.isOpen) { serialPort.open(); }
-        };
-        serialPort.on('open', this.onPortOpened);
+        if (this.serialPort && this.serialPort.isOpen()) {
+            this.disconnect();
+        }
+        this.closePort = false;
+        this.serialPort = new SerialPort(this.config.commport, { baudRate: this.config.baudrate, autoOpen: false });
+        this.parser = this.serialPort.pipe(new InterByteTimeout({ interval: 30 }));
 
-        serialPort.on('close', () => {
-            console.warn("SerialPort closed... waiting 5 sec.");
-            this.web.addMessage('warning', "SerialPort closed... waiting 5 sec.");
+        this.serialPort.on('open', this.onPortOpened);
+        this.serialPort.on('close', this.onPortClosed);
+        this.serialPort.on('error', this.onPortError);
 
-            this.closeSwitchBoard();
-            setTimeout(reconnect, 5000);
-        });
+        this._reconnect();
+        return this.serialPort;
+    }
 
-        serialPort.on('error', () => {
-            console.error("SerialPort not found ... waiting 5 sec.");
-            this.web.addMessage('danger', "SerialPort not found ... waiting 5 sec.");
-
-            this.closeSwitchBoard();
-            setTimeout(reconnect, 5000);
-        });
-
-        reconnect();
-        this.serialPort = serialPort;
+    disconnect() {
+        this.closePort = true;
+        this.serialPort.close();
     }
 
     sendMessage(mac, code, data) {
 
         if (typeof data === "undefined") data = "";
-        var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
-
-        let _msg = [_mac, 1 + data.length, 'h' + ("00" + code.toString(16)).substr(-2), data.toString()];
         if (ignoreCodes.indexOf(code) === -1) {
-            this.web.addMessage('send', JSON.stringify(_msg));
+          var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
+          let _msg = [_mac, 1 + data.length, 'h' + ("00" + code.toString(16)).substr(-2), data.toString()];
+          this.web.addMessage('send', JSON.stringify(_msg));
         }
 
-        var buf = Buffer.alloc(9 + data.length);
+        var buf = Buffer.alloc(9);
         buf.writeUInt8(0x02);
         buf.writeUIntBE(mac, 1, 6);
         buf.writeUInt8(data.length + 1, 7);
         buf.writeUInt8(code, 8);
-        buf.write(data, 9);
         this.serialPort.write(buf);
+        if (data.length > 0) {
+            this.serialPort.write(data);
+        }
     }
 
 
@@ -225,7 +266,7 @@ class NowTalkMain extends events.EventEmitter {
             let status = user.status;
             switch (action) {
                 case "disable":
-                    user.setStatus(0x80, value);
+                    user.setStatus(0x80, !value);
                     if (user.status === 0x01) {
                         user.setStatus(0x03);
                     }
@@ -233,7 +274,7 @@ class NowTalkMain extends events.EventEmitter {
                     this.web.addMessage('success', "Badge's disable status is now changed.");
                     return;
                 case "friend":
-                    user.setStatus(0x20, value);
+                    user.setStatus(0x20, !value);
                     if (user.status === 0x01) {
                         user.setStatus(0x03);
                     }
@@ -302,13 +343,13 @@ class NowTalkMain extends events.EventEmitter {
                     main.config.bridge.bridgeID = bridge[4];
                 }
                 main.web.addMessage('success', "Bridge is alive. ");
+                console.info("Bridge is alive. ", "Version:"+main.config.bridge.version, "Bridge:"+main.config.bridge.bridgeID);
                 main.web.updateConfig();
                 main.startSwitchBoard();
             } else {
                 console.error("Bridge is rejacted: ", data.toString(), data);
                 main.web.addMessage('danger', "Bridge is rejacted: " + JSON.stringify(data) + data.toString());
-
-                //   throw "Wrong answer received from the Bridge. " + data.toString() ;
+                main.disconnect();
             }
             return true;
         };
@@ -317,12 +358,30 @@ class NowTalkMain extends events.EventEmitter {
             let msg = "Bridge did not response on time."
             this.web.addMessage('danger', msg);
             console.error(msg);
-
+            main.closeSwitchBoard();
         }, 1500);
+
+        this.parser.off("data", this.onParserData);
         this.parser.on("data", response);
         this.serialPort.write(msg);
     }
 
+    onPortClosed() {
+        this.closeSwitchBoard();
+        if (!this.closePort) {
+            console.warn("SerialPort closed... waiting 5 sec.");
+            this.web.addMessage('danger', "SerialPort closed... waiting 5 sec.");
+            setTimeout(this._reconnect, 5000);
+        }
+    }
+
+    onPortError() {
+        if (!this.closePort) {
+            console.error("SerialPort not found ... waiting 5 sec.");
+            this.web.addMessage('danger', "SerialPort not found ... waiting 5 sec.");
+            setTimeout(this._reconnect, 5000);
+        }
+    }
     onParserData(data) {
         if (data.readUInt8(0) === 0x02) {
             let msg = {};
@@ -357,7 +416,7 @@ class NowTalkMain extends events.EventEmitter {
             let mac = data.readUIntBE(1, 6).toString(16);
             console.info("Peer " + mac + " is released");
         } else {
-            if (!this.emit("handle_" + data.toString('utf8', 0, 1), data)) {
+             if (!this.emit("handle_" + data.toString('utf8', 0, 1).toUpperCase(), data)) {
                 console.error("Srv.handle_" + data.toString('utf8', 0, 1), data);
             }
         }
@@ -366,7 +425,6 @@ class NowTalkMain extends events.EventEmitter {
     onHandle_Ping(msg) {
         let user = this.getBadge(msg.mac);
         if (typeof user !== "undefined") {
-            //   if (user.status === 0x00) user.setStatus(0x02);
             user.onPingPong(msg);
         }
     }
@@ -376,15 +434,16 @@ class NowTalkMain extends events.EventEmitter {
         let main = this;
         let newbadge = {};
         let onWeb_newBadge;
-        let onNewBadgeTimeout;
+        let onTimeout;
         let onHandle_h10;
 
         let timer;
 
 
-        onNewBadgeTimeout = function () {
+        onTimeout = function (s, x) {
+            console.info(s, x);
             main.off('handle_h10', onHandle_h10);
-            main.off('handle_h11', onNewBadgeTimeout);
+            main.off('handle_h11', onTimeout);
             main.off('web_newBadge', onWeb_newBadge);
             this.unPeer(msg.mac);
             this.web.addNewBadge(false);
@@ -395,13 +454,14 @@ class NowTalkMain extends events.EventEmitter {
         onHandle_h10 = function (msg) {
             clearTimeout(timer);
             main.off('handle_h10', onHandle_h10);
-            main.off('handle_h11', onNewBadgeTimeout);
+            main.off('handle_h11', onTimeout);
             let user = main.getBadge(msg.mac);
             user.fillInfo(newbadge);
             user.setStatus(0x10); user.setStatus(0x01);
             user.updateTimer();
             main.updateBadge(user);
             main.web.addMessage('success', "New badge has been added.");
+            this.newBadgeInUse = false;
             return true;
         };
 
@@ -410,7 +470,7 @@ class NowTalkMain extends events.EventEmitter {
             console.info(body);
             this.off('web_newBadge', onWeb_newBadge);
             main.off('handle_h10', onHandle_h10);
-            main.off('handle_h11', onNewBadgeTimeout);
+            main.off('handle_h11', onTimeout);
             if (typeof body.badgeid != "undefined" &&
                 typeof body.username != "undefined") {
                 let test = body.badgeid + "~" + this.config.externelIP + "~" +
@@ -418,7 +478,7 @@ class NowTalkMain extends events.EventEmitter {
                 test += "~" + crc16.checkSum("nowTalkSrv!" + test, 'utf8');
                 newbadge = { mac: msg.mac, ip: this.config.externelIP, name: body.username, key: body.badgeid };
                 main.on("handle_h10", onHandle_h10);
-                main.on('handle_h11', onNewBadgeTimeout);
+                main.on('handle_h11', onTimeout);
                 this.sendMessage(msg.mac, 0x07, test);
                 timer.refresh();
             } else if ((typeof body === "boolean") && (body === false)) {
@@ -428,38 +488,40 @@ class NowTalkMain extends events.EventEmitter {
             } else {
                 timer.refresh();
                 main.on("handle_h10", onHandle_h10);
-                main.on('handle_h11', onNewBadgeTimeout);
+                main.on('handle_h11', onTimeout);
                 main.on('web_newBadge', onWeb_newBadge);
             }
         };
 
         onWeb_newBadge = onWeb_newBadge.bind(main);
         onHandle_h10 = onHandle_h10.bind(main);
-        onNewBadgeTimeout = onNewBadgeTimeout.bind(main);
+        onTimeout = onTimeout.bind(main);
 
         if (!this.newBadgeInUse) {
             this.newBadgeInUse = true;
             
             let user = this.getBadge(msg.mac);
-
-            if ((typeof user !== "undefined") && user.isStatus(0x10) && user.key) {
-                let test = user.key + "~" + this.config.externelIP + "~" +
+            console.info(user);
+            if ((typeof user !== "undefined") && user.isStatus(0x10) && user.badgeID) {
+                let test = user.badgeID + "~" + this.config.externelIP + "~" +
                     user.name + "~" + this.config.switchboardName;
                 test += "~" + crc16.checkSum("nowTalkSrv!" + test, 'utf8');
-                newbadge = { mac: msg.mac, ip: this.config.externelIP, name: user.name, key: user.key };
+                newbadge = { mac: msg.mac, ip: this.config.externelIP, name: user.name, key: user.badgeID, status: user.status };
                 main.on("handle_h10", onHandle_h10);
-                main.on('handle_h11', onNewBadgeTimeout);
+                main.on('handle_h11', onTimeout);
                 this.sendMessage(msg.mac, 0x07, test);
             } else {
                 this.updateBadge({ mac: msg.mac, status: 0x00 });
                 if (this.web.addNewBadge(true)) {
-                    timer = setTimeout(onNewBadgeTimeout, 90000);
+                    timer = setTimeout(onTimeout, 90000, "timeout");
                     this.on('web_newBadge', onWeb_newBadge);
                 } else {
                     console.error('No dashboard is open atm.')
                     this.newBadgeInUse = false;
                 }
             }
+        } else {
+            this.web.addMessage('danger', "New Badge in use.");
         }
     }
 
