@@ -14,7 +14,7 @@
 
 #include <esp_now.h>
 #include <WiFi.h>
-
+#include "rom/crc.h"
 #include <esp_wifi.h> 
 
 #include <Button2.h>
@@ -25,6 +25,9 @@
 //#include "esp_adc_cal.h"
 #include "switchboard.h"
 #include"display.h"
+extern "C" {
+#include "crypto/base64.h"
+}
 
 
 #define BUTTON_1 35
@@ -69,8 +72,49 @@ void handleCommand()
     {
         ClearBadge( );
     }
+    else if (inputString.equals("init~"))
+    {
+        if (config.registrationMode)
+        {
+            String checkID = getValue(inputString, '~', 1);
+            String IP = getValue(inputString, '~', 2);
+            String name = getValue(inputString, '~', 3);
+            String network = getValue(inputString, '~', 4);
+            String mac = getValue(inputString, '~', 5);
+
+            uint16_t crc = getValue(inputString, '~', 6).toInt();
+            size_t outputLength;
+            unsigned char* decoded = base64_decode((const unsigned char*)mac.c_str(), mac.length(), &outputLength);
+
+            String test = "nowTalkSrv!" + checkID + "~" + IP + "~" + name + "~" + network + "~" + mac;
+
+            uint16_t checkCrc = crc16_le(0, (uint8_t const*)test.c_str(), test.length());
+            //            uint16_t checkCrc crc16((uint8_t *)test.c_str(), test.length, 0x1021, 0, 0, false, false);
+            if ((crc == checkCrc) && (checkID == badgeID()) && (outputLength ==6 )) { //
+                strlcpy(config.masterIP, IP.c_str(), sizeof(config.masterIP)); // <- destination's capacity
+                strlcpy(config.userName, name.c_str(), sizeof(config.userName)); // <- destination's capacity
+                strlcpy(config.switchboard, network.c_str(), sizeof(config.switchboard)); // <- destination's capacity
+
+                
+                memcpy(config.masterSwitchboard, decoded, 6);
+                memcpy(currentSwitchboard, decoded, 6);
+                saveConfiguration();
+                Serial.print( NOWTALK_CLIENT_ACK);
+                ShowMessage('*', ("Switchboard:\n%s\n\nCallname: %s"), config.switchboard, config.userName);
+                config.registrationMode = false;
+                return;
+            }
+            else {
+                Serial.print(NOWTALK_CLIENT_NACK);
+                ShowMessage(F("Wrong Badge Id!\nPress Enter Button."), '!');
+            }
+        }
+
+    }
     else if (inputString.equals("info"))
     {
+        Serial.print(WiFi.macAddress());
+        Serial.print('~');
         Serial.print(badgeID());
         Serial.print('~');
         if (config.masterSwitchboard[0] == 0)
@@ -90,7 +134,7 @@ void handleCommand()
     }
     else
     {
-        Serial.println("ERROR: >" + inputString + "<");
+        Serial.printf(("E ERROR: > %s<"), inputString.c_str());
     }
 }
 
@@ -104,7 +148,14 @@ void serialEvent()
             continue;
         if (inChar == '\n')
         {
-            stringComplete = true;
+
+            if (inputString.startsWith("###"))
+            {
+                handleCommand();
+            }
+            // clear the string:
+            inputString = "";
+
         }
         else
         {
@@ -113,21 +164,6 @@ void serialEvent()
     }
 }
 
-void print_wakeup_reason() {
-    esp_sleep_wakeup_cause_t wakeup_reason;
-
-    wakeup_reason = esp_sleep_get_wakeup_cause();
-
-    switch (wakeup_reason)
-    {
-    case ESP_SLEEP_WAKEUP_EXT0: Serial.println("Wakeup caused by external signal using RTC_IO"); break;
-    case ESP_SLEEP_WAKEUP_EXT1: Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
-    case ESP_SLEEP_WAKEUP_TIMER: Serial.println("Wakeup caused by timer"); break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD: Serial.println("Wakeup caused by touchpad"); break;
-    case ESP_SLEEP_WAKEUP_ULP: Serial.println("Wakeup caused by ULP program"); break;
-    default: Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason); break;
-    }
-}
 
 void setup()
 {
@@ -135,17 +171,8 @@ void setup()
     Serial.begin(115200);
      //   Serial.println(wakeup);
     config.wakeup = wakeup;
-    //   print_wakeup_reason();
-
-    if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED))
-    {
-        Serial.println("E SPIFFS Mount Failed");
-        esp_restart();
-        return;
-    }
 
     loadConfiguration();
-
 
     inputString.reserve(300);
 
@@ -168,8 +195,8 @@ void setup()
 
     if (!config.wakeup) {
         initTFT();
-        ShowMessage('*',"Version: %s" , VERSION );
-        Serial.printf("* Model: %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
+        ShowMessage('*',("Version: %s") , VERSION );
+        Serial.printf(("* Model: %s Rev %d\n"), ESP.getChipModel(), ESP.getChipRevision());
         Serial.print(F("* MasterIP: "));
         Serial.println(config.masterIP);
         Serial.print(F("* Username: "));
@@ -182,7 +209,7 @@ void setup()
     }
 
     if (esp_now_init() != 0) {
-        ShowMessage("Error initializing ESP-NOW", 'E');
+        ShowMessage(F("Error initializing ESP-NOW"), 'E');
         return;
     }
 
@@ -201,10 +228,7 @@ void setup()
     if (!config.wakeup) {
         myEvents.free(0);
         if (config.registrationMode) {
-            ShowMessage("New Badge!\n\nPress Enter Button\nto register...", '!');
-
- //           myEvents.timerOnce(1, OnPing);
-            myEvents.disable(0);
+            ShowMessage("New Badge!", '!');
         }
         else {
             ShowMessage("READY", '*');
@@ -233,19 +257,5 @@ void loop()
         read_idx = (read_idx + 1) % QUEUE_SIZE;
     }
 
-    if (stringComplete)
-    {
-
-        if (inputString.startsWith("###"))
-        {
-            handleCommand();
-        }
-        // clear the string:
-        inputString = "";
-        stringComplete = false;
-    }
-    else
-    {
-        serialEvent();
-    }
+    serialEvent();
 }

@@ -3,10 +3,10 @@
 
 #include <Arduino.h>
 #include "variables.h"
-#include <esp_now.h>
+//#include <esp_now.h>
 #include "nowtalk.h"
 #include "display.h"
-#include"time.h"
+//#include "time.h"
 
 // #include "CRC.h"
 tm mytm;
@@ -92,37 +92,6 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info,
     }
     break;
 
-    case NOWTALK_SERVER_ACCEPT:
-    {
-        add_peer(mac);
-        if (config.registrationMode)
-        {
-            String checkID = getValue(split, '~', 0);
-            String IP = getValue(split, '~', 1);
-            String name = getValue(split, '~', 2);
-            String network = getValue(split, '~', 3);
-            //       uint16_t crc = getValue(split, '~', 4).toInt();
-            test = "nowTalkSrv!" + checkID + "~" + IP + "~" + name + "~" + network;
-            //            uint16_t checkCrc crc16((uint8_t *)test.c_str(), test.length, 0x1021, 0, 0, false, false);
-            if (checkID == badgeID())  { //crc == checkCrc &&
-                strlcpy(config.masterIP, IP.c_str(), sizeof(config.masterIP)); // <- destination's capacity
-                strlcpy(config.userName, name.c_str(), sizeof(config.userName)); // <- destination's capacity
-                strlcpy(config.switchboard, network.c_str(), sizeof(config.switchboard)); // <- destination's capacity
-                memcpy(config.masterSwitchboard, mac, 6);
-                memcpy(currentSwitchboard, mac, 6);
-                saveConfiguration();
-                send_message(mac, NOWTALK_CLIENT_ACK, "");
-                ShowMessage('*', "Switchboard:\n%s\n\nCallname: %s", config.switchboard, config.userName);
-                config.registrationMode = false;
-                return;
-            }  else {
-                send_message(mac, NOWTALK_CLIENT_NACK, "");
-                ShowMessage("Wrong Badge Id!\nPress Enter Button.", '!');
-            }
-        }
-        esp_now_del_peer(mac);
-    }
-    break;
     case NOWTALK_SERVER_NEW_IP:
     {
         String OldIP = getValue(split, '~', 0);

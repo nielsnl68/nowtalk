@@ -5,7 +5,7 @@
 
 #define ARDUINOJSON_USE_LONG_LONG 1
 #include <Arduino.h>
-#include <HTTPClient.h>
+
 #include "FS.h"
 #include "SPIFFS.h"
 #include <ArduinoJson.h>
@@ -137,22 +137,6 @@ bool stringComplete = false; // whether the string is complete
 
 uint16_t vref = 1100;
 
-String GetExternalIP()
-{
-    String ip = "";
-
-    HTTPClient http;
-    http.begin("http://api.ipify.org/?format=text");
-    int statusCode = http.GET();
-    if (statusCode == 200)
-    {
-        ip = http.getString();
-    }
-    http.end();
-    return ip;
-}
-
-
 String getValue(String data, char separator, int index)
 {
     int found = 0;
@@ -194,9 +178,17 @@ String badgeID()
     return result + String(baseChars[crc % base]);
 }
 
+
 // load configuration from a file
 void loadConfiguration(bool clear = false)
 {
+    if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED))
+    {
+        Serial.println(F("E SPIFFS Mount Failed"));
+        esp_restart();
+        return;
+    }
+
     if (clear)
         SPIFFS.remove(configFile);
     // Allocate a temporary JsonDocument
@@ -248,6 +240,12 @@ void loadConfiguration(bool clear = false)
 // Saves the configuration to a file
 void saveConfiguration()
 {
+    if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED))
+    {
+        Serial.println(F("E SPIFFS Mount Failed"));
+        esp_restart();
+        return;
+    }
     // Delete existing file, otherwise the configuration is appended to the file
     SPIFFS.remove(configFile);
 
@@ -296,6 +294,7 @@ void saveConfiguration()
 
     // Close the file
     file.close();
+
 }
 
 #endif

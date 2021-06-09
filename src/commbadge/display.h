@@ -1,15 +1,13 @@
 #ifndef NOWTALK_DISPLAY
 #define NOWTALK_DISPLAY
 
-//#include "Pangodream_18650_CL.h"
 #include <TFT_eSPI.h>
-#include <SPI.h>
+
 #include "esp_adc_cal.h"
-#include <Wire.h>
-#include <WiFi.h>
+
 #include "variables.h"
 #include "nowTalkLogo.h"
-#include "battery.h"
+//#include "battery.h"
 #include "nowtalk.h"
 
 void ShowMessage(const String msg, char SerialPrefix = ' ');

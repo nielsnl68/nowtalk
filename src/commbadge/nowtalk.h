@@ -14,7 +14,7 @@ void add_peer(const uint8_t* mac) {
         peerInfo.channel = config.channel;
         // Add peer        
         if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-            ShowMessage("Failed to add peer", '!');
+            ShowMessage(F("Failed to add peer"), '!');
             return;
         }
     }
@@ -22,7 +22,7 @@ void add_peer(const uint8_t* mac) {
 
 void serial_mac(const uint8_t* mac_addr) {
     char macStr[18];
-    snprintf(macStr, sizeof(macStr), "%02x%02x%02x%02x%02x%02x ",
+    snprintf(macStr, sizeof(macStr),("%02x%02x%02x%02x%02x%02x "),
         mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
     Serial.print(macStr);
 }
@@ -135,7 +135,7 @@ void Reboot() {
 }
 
 void ClearBadge() {
-    ShowMessage("Okey,\n Clearing badge and\nreboot.", '!');
+    ShowMessage(F("Okey,\n Clearing badge and\nreboot."), '!');
     delay(3000);
     loadConfiguration(true);
     Reboot();
@@ -157,13 +157,7 @@ void OnClearBadge(Button2& b) {
 
 void OnRegisterBadge(Button2& b)
 {
-    if (config.registrationMode)
-    {
-        broadcast(NOWTALK_CLIENT_NEWPEER, "");
-        // config.registrationMode = true;
-        ShowMessage("Badge code:\n" + badgeID());
-    }
-    else if (currentSwitchboard[0] != 0)
+    if (currentSwitchboard[0] != 0)
     {
         send_message(currentSwitchboard, NOWTALK_CLIENT_START_CALL, "");
     }
@@ -172,6 +166,7 @@ void OnRegisterBadge(Button2& b)
         broadcast(NOWTALK_CLIENT_PING, "");
     }
 }
+
 void OnLongPress(Button2& btn) {
     GoSleep();
 }
@@ -188,7 +183,7 @@ void OnGoSleep(AlarmID_t ID) {
 void OnPing(AlarmID_t ID) {
     if (currentSwitchboard[0] == 0)
     {
-        Serial.println("*  Search SwitchBoard");
+        Serial.println(F("*  Search SwitchBoard"));
         broadcast(0x01, "");
     }
     else
