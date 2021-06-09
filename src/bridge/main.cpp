@@ -3,8 +3,12 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include "Version.h"
 
-#define VERSION 2.26221
+#ifndef VERSION
+    #define VERSION "2.26.221"
+#endif
+
 #define FORMAT_SPIFFS_IF_FAILED true
 
 uint8_t broadcastAddress[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
@@ -80,7 +84,7 @@ void setup()
     Serial.begin(115200);
     Serial.setDebugOutput(true);
     Serial.print(F("NowTalk Bridge Version:"));
-    Serial.println(VERSION, 3);
+    Serial.println(VERSION);
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
 
@@ -119,7 +123,7 @@ void serialEvent()
             Serial.write('#');
             Serial.write(x.c_str());
             Serial.write('~');
-            Serial.print(VERSION, 3);
+            Serial.print(VERSION);
             Serial.write('~');
             Serial.print(WiFi.macAddress());
             Serial.write('~');
