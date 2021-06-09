@@ -5,3 +5,7 @@
 .vscode/ipch
 nodejs/switchboard/node_modules
 nodejs/switchboard/nowTalk.sqlite
+bin/commBadge.bin
+bin/nowTalkBadge.bin
+bin/nowTalkBridge.bin
+.version_no_increment

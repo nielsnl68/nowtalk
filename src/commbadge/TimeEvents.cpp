@@ -213,7 +213,7 @@ AlarmID_t TimeEventsClass::create(uint32_t value, OnTick_t onTickHandler, uint8_
 
 void TimeEventsClass::updateNextTrigger(AlarmID_t ID)
 {
-    if (m_alarms[ID].Mode.isEnabled) {
+    if (isAllocated(ID) && m_alarms[ID].Mode.isEnabled) {
         uint64_t now = timeNow();
         if (m_alarms[ID].nextTrigger <= now) {
             switch (m_alarms[ID].Mode.alarmType) {

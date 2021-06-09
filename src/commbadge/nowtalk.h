@@ -125,26 +125,30 @@ String IpAddress2String(const IPAddress& ipAddress)
 
 void OnPing(AlarmID_t ID);
 
-void ClearBadge() {
-    ShowMessage("Okey,\n Clearing badge and\nreboot.", '!');
-    delay(3000);
+void Reboot() {
     if (config.TFTActive) {
         ledcWrite(TFT_BL, 0);
         tft.writecommand(TFT_DISPOFF);
         tft.writecommand(TFT_SLPIN);
     }
-
-    loadConfiguration(true);
     ESP.restart();
+}
+
+void ClearBadge() {
+    ShowMessage("Okey,\n Clearing badge and\nreboot.", '!');
+    delay(3000);
+    loadConfiguration(true);
+    Reboot();
 }
 
 void checkReaction() {
     if (config.heartbeat > 3) {
-        esp_now_del_peer(config.masterAddress);
-        config.masterAddress[0] = 0x00;
+        esp_now_del_peer(currentSwitchboard);
+        currentSwitchboard[0] = 0x00;
     }
-    uint32_t i = config.timerDelay * (config.masterAddress[0] == 0) ? 5 : 1;
-    myEvents.timerOnce(i, OnPing);
+    uint32_t i = config.timerPing * ((currentSwitchboard[0] == 0) ? 5 : 1);
+    //Serial.printf("checkReaction %d %ld \n", i, config.timerPing);
+     myEvents.timerOnce(i, OnPing);
 }
 
 void OnClearBadge(Button2& b) {
@@ -159,9 +163,9 @@ void OnRegisterBadge(Button2& b)
         // config.registrationMode = true;
         ShowMessage("Badge code:\n" + badgeID());
     }
-    else if (config.masterAddress[0] != 0)
+    else if (currentSwitchboard[0] != 0)
     {
-        send_message(config.masterAddress, NOWTALK_CLIENT_START_CALL, "");
+        send_message(currentSwitchboard, NOWTALK_CLIENT_START_CALL, "");
     }
     else
     {
@@ -182,16 +186,16 @@ void OnGoSleep(AlarmID_t ID) {
 }
 
 void OnPing(AlarmID_t ID) {
-    if (config.masterAddress[0] == 0)
+    if (currentSwitchboard[0] == 0)
     {
         Serial.println("*  Search SwitchBoard");
         broadcast(0x01, "");
     }
     else
     {
-        send_message(config.masterAddress, 0x01, "");
+        send_message(currentSwitchboard, 0x01, "");
     }
-    config.timeoutID = myEvents.timerOnce(150, OnNoReaction);
+    config.timeoutID = myEvents.timerOnce(500, OnNoReaction);
 }
 
 

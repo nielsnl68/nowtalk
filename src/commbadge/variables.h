@@ -10,9 +10,12 @@
 #include "SPIFFS.h"
 #include <ArduinoJson.h>
 #include "TimeEvents.h"
+#include "Version.h"
 
+#ifndef VERSION
+#define VERSION "0.0.0"
+#endif
 
-#define VERSION 32.250
 
 /// Request message codes :
 
@@ -39,11 +42,10 @@
 #define NOWTALK_CLIENT_RECEIVE 0x38
 #define NOWTALK_CLIENT_CLOSED 0x39
 
-#define NOWTALK_CLIENT_STREAM 0x3df
+#define NOWTALK_STREAM_START 0x3d
+#define NOWTALK_STREAM_DATA 0x3e
+#define NOWTALK_STREAM_END 0x3df
 
-#define NOWTALK_SERVER_UPGRADE 0xe0
-#define NOWTALK_SERVER_SENDFILE 0x31
-#define NOWTALK_CLIENT_RECEIVED 0x32
 
 #define NOWTALK_CLIENT_HELPSOS 0xff
 
@@ -63,28 +65,29 @@ struct config_t
 {
     boolean wakeup = false;
     unsigned long lastTime = 0;
-    unsigned long timerDelay = 30000; // send readings timer
+    unsigned long timerPing = 30000; // send readings timer
     unsigned long timerSleep  = 90000;
     bool registrationMode = false;
     char masterIP[40] = "<None>";
     char userName[64] = "<None>";
-    uint8_t masterAddress[6] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    uint8_t masterSwitchboard[6] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     byte channel = 0;
     char switchboard[32] = "";
     boolean TFTActive = false;
     int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
     int sprVolume = 40;
     int sleepID = -1;
-    int heartbeatID = -1;
+    int PingID = -1;
     int timeoutID = -1;
     short heartbeat = 0;
-
+    size_t updateSize = 0;
 };
 const char* configFile = "/config.json"; // <- SD library uses 8.3 filenames
 
 config_t config;//
 
 RTC_DATA_ATTR boolean wakeup = false;
+RTC_DATA_ATTR uint8_t currentSwitchboard[6] = { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
 alarm_t alarms[dtNBR_ALARMS];
 TimeEventsClass myEvents = TimeEventsClass(alarms);
@@ -208,13 +211,13 @@ void loadConfiguration(bool clear = false)
         deserializeJson(doc, file);
         file.close();
     }
-
+   // serializeJsonPretty(doc, Serial);
     // Copy values from the JsonDocument to the Config
     config.channel = doc["channel"] | 0;
     //config.port = doc["port"] | 2731;
     strlcpy(config.switchboard, doc["switchboard"] | "", sizeof(config.switchboard)); // <- destination's capacity
 
-    config.timerDelay = doc["timerDelay"] | 30000;      // send readings timer
+    config.timerPing = doc["timerPing"] | 30000;      // send readings timer
     config.timerSleep = doc["timerSleep"] |  90000; //EVENT_INTERVAL_MS
     config.ledBacklight = doc["ledBacklight"] | 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
     config.sprVolume = doc["sprVolume"] | 40;
@@ -237,6 +240,7 @@ void loadConfiguration(bool clear = false)
         alarms[id].Mode.isEnabled = elem["mode_isEnabled"]; 
         alarms[id].Mode.isOneShot = elem["mode_isOneShot"]; 
         alarms[id].onTickHandler = (OnTick_t)elem["trigger"].as<uint32_t>();
+        Serial.printf("timeleft %lld\n", myEvents.timeNow() - nt);
         myEvents.updateNextTrigger(id);
     }
 }
@@ -263,7 +267,7 @@ void saveConfiguration()
     //doc["port"] = config.port;
     doc["switchboard"] = config.switchboard;
 
-    doc["timerDelay"] = config.timerDelay;       // send readings timer
+    doc["timerPing"] = config.timerPing;       // send readings timer
     doc["timerSleep"] = config.timerSleep; //EVENT_INTERVAL_MS
 
     doc["masterIP"] = config.masterIP;
@@ -284,7 +288,6 @@ void saveConfiguration()
             data_0["trigger"] = (uint32_t) alarms[id].onTickHandler;
         }
     }
-
     
     if (serializeJson(doc, file) == 0)
     {

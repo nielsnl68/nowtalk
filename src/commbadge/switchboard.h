@@ -6,7 +6,6 @@
 #include <esp_now.h>
 #include "nowtalk.h"
 #include "display.h"
-
 #include"time.h"
 
 // #include "CRC.h"
@@ -26,7 +25,6 @@ tm createTM(const char* str)
     return mytm;
 }
 
-
 void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info, size_t count)
 {
     String test;
@@ -45,19 +43,16 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info,
     case NOWTALK_SERVER_PONG:
     {
         // turn off timeout
-        bool isNewMaster = (config.masterAddress[0] == 0);
+        bool isNewMaster = (currentSwitchboard[0] == 0);
         if (isNewMaster)
-        {
+        {  
             if (!config.wakeup) {
                 sprintf(msg, "Switchboard at:\n%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                 ShowMessage(msg, '*');
             }
-            memcpy(config.masterAddress, mac, 6);
+            memcpy(currentSwitchboard, mac, 6);
             add_peer(mac);
-            myEvents.timerOnce(config.timerDelay, OnPing);
-            if (config.wakeup) {
-                GoSleep();
-            }
+
         }
         if (split.length() > 0) {
             String name = getValue(split, '~', 0);
@@ -70,8 +65,16 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info,
         tm xtm = createTM(date.c_str());
         setTime(makeTime(xtm))
         */
+
+      //  Serial.println(config.timerPing);
+        myEvents.free(config.timeoutID); config.timeoutID = -1;
+        myEvents.timerOnce(config.timerPing, OnPing);
         config.heartbeat = 0;
-        
+
+        if (config.wakeup) {
+            GoSleep();
+        }
+
 
     }
     break;
@@ -80,7 +83,10 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info,
     {
         add_peer(mac);
         if ((strcmp(config.masterIP, "<None>") != 0) && (strcmp(config.userName, "<None>") != 0)) {
-            send_message(mac, NOWTALK_CLIENT_DETAILS, String(config.masterIP) + "~" + String(config.userName));
+            send_message(mac, NOWTALK_CLIENT_DETAILS, String(config.masterIP) + "~" + String(config.userName)+"~"+badgeID());
+        }  else {
+            send_message(mac, NOWTALK_CLIENT_NACK, "");
+            
         }
         esp_now_del_peer(mac);
     }
@@ -98,19 +104,18 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info,
             //       uint16_t crc = getValue(split, '~', 4).toInt();
             test = "nowTalkSrv!" + checkID + "~" + IP + "~" + name + "~" + network;
             //            uint16_t checkCrc crc16((uint8_t *)test.c_str(), test.length, 0x1021, 0, 0, false, false);
-            if (checkID == badgeID())
-            {                                                                  //crc == checkCrc &&
+            if (checkID == badgeID())  { //crc == checkCrc &&
                 strlcpy(config.masterIP, IP.c_str(), sizeof(config.masterIP)); // <- destination's capacity
                 strlcpy(config.userName, name.c_str(), sizeof(config.userName)); // <- destination's capacity
                 strlcpy(config.switchboard, network.c_str(), sizeof(config.switchboard)); // <- destination's capacity
-                memcpy(config.masterAddress, mac, 6);
+                memcpy(config.masterSwitchboard, mac, 6);
+                memcpy(currentSwitchboard, mac, 6);
                 saveConfiguration();
                 send_message(mac, NOWTALK_CLIENT_ACK, "");
                 ShowMessage('*', "Switchboard:\n%s\n\nCallname: %s", config.switchboard, config.userName);
                 config.registrationMode = false;
                 return;
-            }            
-else {
+            }  else {
                 send_message(mac, NOWTALK_CLIENT_NACK, "");
                 ShowMessage("Wrong Badge Id!\nPress Enter Button.", '!');
             }
@@ -127,8 +132,7 @@ else {
             strlcpy(config.masterIP, NewIP.c_str(), sizeof(config.masterIP)); // <- destination's capacity
 
             send_message(mac, NOWTALK_CLIENT_ACK, "");
-            sprintf(msg, "Update IP to: \n%s", config.masterIP);
-            ShowMessage(msg, '*');
+            ShowMessage( '*',  "Update IP to: \n%s", config.masterIP);
         }
         else {
             send_message(mac, NOWTALK_CLIENT_NACK, "");
@@ -139,22 +143,18 @@ else {
     {
         String OldName = getValue(split, '~', 0);
         String NewName = getValue(split, '~', 1);
-        if (strcmp(config.userName, OldName.c_str()) == 0)
-        {
+        if (strcmp(config.userName, OldName.c_str()) == 0){
             strlcpy(config.userName, NewName.c_str(), sizeof(config.userName)); // <- destination's capacity
             send_message(mac, NOWTALK_CLIENT_ACK, "");
-            sprintf(msg, "Update Name to: \n%s", config.userName);
-            ShowMessage(msg, '*');
-        }
-        else {
+            ShowMessage( '*', "Update Name to: \n%s", config.userName );
+        } else {
             send_message(mac, NOWTALK_CLIENT_NACK, "");
         }
     }
     break;
     default:
-        sprintf(msg, "Unknown msg from: \n%02x%02x%02x%02x%02x%02x\n [%02x] %s",
-            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], action, info);
-        ShowMessage(msg, '!');
+        ShowMessage('!', "Unknown msg from: \n%02x%02x%02x%02x%02x%02x\n [%02x] %s",
+                                        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], action, info);
     }
 }
 

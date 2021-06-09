@@ -9,11 +9,13 @@
   copies or substantial portions of the Software.
 */
 
+
 #include <Arduino.h>
 
 #include <esp_now.h>
 #include <WiFi.h>
-#include <esp_wifi.h>
+
+#include <esp_wifi.h> 
 
 #include <Button2.h>
 
@@ -71,20 +73,20 @@ void handleCommand()
     {
         Serial.print(badgeID());
         Serial.print('~');
-        if (config.masterAddress[0] == 0)
+        if (config.masterSwitchboard[0] == 0)
         {
             Serial.print("<none>");
         }
         else
         {
-            serial_mac(config.masterAddress);
+            serial_mac(config.masterSwitchboard);
         }
         Serial.print('~');
         Serial.print(config.masterIP);
         Serial.print('~');
         Serial.print(config.userName);
         Serial.print('~');
-        Serial.println(VERSION, 3);
+        Serial.println(VERSION);
     }
     else
     {
@@ -131,7 +133,7 @@ void setup()
 {
     // Init Serial Monitor
     Serial.begin(115200);
-    //   Serial.println(wakeup);
+     //   Serial.println(wakeup);
     config.wakeup = wakeup;
     //   print_wakeup_reason();
 
@@ -166,7 +168,7 @@ void setup()
 
     if (!config.wakeup) {
         initTFT();
-        ShowMessage("Version: " + String(VERSION, 3), '*');
+        ShowMessage('*',"Version: %s" , VERSION );
         Serial.printf("* Model: %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
         Serial.print(F("* MasterIP: "));
         Serial.println(config.masterIP);
@@ -201,13 +203,12 @@ void setup()
         if (config.registrationMode) {
             ShowMessage("New Badge!\n\nPress Enter Button\nto register...", '!');
 
-            myEvents.timerOnce(1, OnPing);
+ //           myEvents.timerOnce(1, OnPing);
             myEvents.disable(0);
         }
         else {
             ShowMessage("READY", '*');
-            uint32_t i = config.timerDelay * (config.masterAddress[0] == 0) ? 5 : 1;
-            myEvents.timerOnce(i, OnPing);
+            OnPing(-1);
         }
         config.sleepID = myEvents.timerOnce(config.timerSleep, OnGoSleep);
     }
