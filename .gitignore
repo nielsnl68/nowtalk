@@ -4,9 +4,12 @@
 .vscode/launch.json
 .vscode/ipch
 nodejs/switchboard/node_modules
-nodejs/switchboard/nowTalk.sqlite
+nowTalk.sqlite
 bin/commBadge.bin
 bin/nowTalkBadge.bin
 bin/nowTalkBridge.bin
 .version_no_increment
 nodejs/switchboard/nowTalk.sqlite
+nodejs/switchboard/https/dhparam.pem
+nodejs/switchboard/https/selfsigned.crt
+nodejs/switchboard/https/selfsigned.key

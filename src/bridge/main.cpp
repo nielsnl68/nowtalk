@@ -119,7 +119,7 @@ void serialEvent()
         byte inChar = Serial.read();
         if (inChar == '*')
         {
-            String x = Serial.readStringUntil((char)0x00);
+            String x = Serial.readStringUntil((char)0x10);
             Serial.write('#');
             Serial.write(x.c_str());
             Serial.write('~');

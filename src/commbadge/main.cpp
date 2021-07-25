@@ -28,7 +28,7 @@
 extern "C" {
 #include "crypto/base64.h"
 }
-
+#include"audio.h"
 
 #define BUTTON_1 35
 #define BUTTON_2 13
@@ -54,7 +54,7 @@ void OnDataRecv(const uint8_t* mac, const uint8_t* buf, int count)
     // copy to circular buffer
     int idx = write_idx;
     write_idx = (write_idx + 1) % QUEUE_SIZE;
-    
+
     memcpy(circbuf[idx].mac, mac, 6);
     circbuf[idx].code = buf[0];
     memset(circbuf[idx].buf, 0, 255);
@@ -70,9 +70,9 @@ void handleCommand()
 
     if (inputString.equals("clear"))
     {
-        ClearBadge( );
+        ClearBadge();
     }
-    else if (inputString.equals("init~"))
+    else if (inputString.startsWith("init~"))
     {
         if (config.registrationMode)
         {
@@ -83,58 +83,64 @@ void handleCommand()
             String mac = getValue(inputString, '~', 5);
 
             uint16_t crc = getValue(inputString, '~', 6).toInt();
-            size_t outputLength;
-            unsigned char* decoded = base64_decode((const unsigned char*)mac.c_str(), mac.length(), &outputLength);
 
             String test = "nowTalkSrv!" + checkID + "~" + IP + "~" + name + "~" + network + "~" + mac;
 
             uint16_t checkCrc = crc16_le(0, (uint8_t const*)test.c_str(), test.length());
             //            uint16_t checkCrc crc16((uint8_t *)test.c_str(), test.length, 0x1021, 0, 0, false, false);
-            if ((crc == checkCrc) && (checkID == badgeID()) && (outputLength ==6 )) { //
+            if ((crc == checkCrc) && (checkID == badgeID())) { //
                 strlcpy(config.masterIP, IP.c_str(), sizeof(config.masterIP)); // <- destination's capacity
                 strlcpy(config.userName, name.c_str(), sizeof(config.userName)); // <- destination's capacity
                 strlcpy(config.switchboard, network.c_str(), sizeof(config.switchboard)); // <- destination's capacity
 
-                
+                size_t outputLength;
+                unsigned char* decoded = base64_decode((const unsigned char*)mac.c_str(), mac.length(), &outputLength);
                 memcpy(config.masterSwitchboard, decoded, 6);
                 memcpy(currentSwitchboard, decoded, 6);
+                free(decoded);
                 saveConfiguration();
-                Serial.print( NOWTALK_CLIENT_ACK);
+                Serial.print("# ACK");
                 ShowMessage('*', ("Switchboard:\n%s\n\nCallname: %s"), config.switchboard, config.userName);
                 config.registrationMode = false;
                 return;
             }
             else {
-                Serial.print(NOWTALK_CLIENT_NACK);
+                Serial.print("# NACK");
                 ShowMessage(F("Wrong Badge Id!\nPress Enter Button."), '!');
             }
         }
 
     }
-    else if (inputString.equals("info"))
+    else if (inputString.startsWith("info~"))
     {
-        Serial.print(WiFi.macAddress());
+        if (config.masterSwitchboard[0] != 0) {
+            String mac = getValue(inputString, '~', 1);
+            
+            byte decoded[6];
+            mac.replace(":", "");
+            hexStringToBytes(mac.c_str(), decoded);
+            boolean okay = memcmp(config.masterSwitchboard, (char*)decoded, 6) == 0;
+            if (!okay) {
+                Serial.println("# NACK");
+                return;
+            }
+        }
+        uint8_t mac[6];
+        Serial.print("# ");
+        serial_mac(WiFi.macAddress(mac));
         Serial.print('~');
         Serial.print(badgeID());
-        Serial.print('~');
-        if (config.masterSwitchboard[0] == 0)
-        {
-            Serial.print("<none>");
-        }
-        else
-        {
-            serial_mac(config.masterSwitchboard);
-        }
         Serial.print('~');
         Serial.print(config.masterIP);
         Serial.print('~');
         Serial.print(config.userName);
         Serial.print('~');
-        Serial.println(VERSION);
+        Serial.print(VERSION);
+        Serial.print('\n');
     }
     else
     {
-        Serial.printf(("E ERROR: > %s<"), inputString.c_str());
+        Serial.printf(("E ERROR: > %s<\n"), inputString.c_str());
     }
 }
 
@@ -169,7 +175,8 @@ void setup()
 {
     // Init Serial Monitor
     Serial.begin(115200);
-     //   Serial.println(wakeup);
+    //   Serial.println(wakeup);
+
     config.wakeup = wakeup;
 
     loadConfiguration();
@@ -179,6 +186,9 @@ void setup()
     // Set device as a Wi-Fi Station
     WiFi.disconnect(true, true);
     WiFi.mode(WIFI_AP_STA);
+#ifdef CONFIG_ESPNOW_ENABLE_LONG_RANGE
+    esp_wifi_get_protocol(ESP_IF_WIFI_STA, WIFI_PROTOCOL_LR);
+#endif
 
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(config.channel, WIFI_SECOND_CHAN_NONE);
@@ -195,8 +205,8 @@ void setup()
 
     if (!config.wakeup) {
         initTFT();
-        ShowMessage('*',("Version: %s") , VERSION );
-        Serial.printf(("* Model: %s Rev %d\n"), ESP.getChipModel(), ESP.getChipRevision());
+        Serial.printf("* Model: %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
+        Serial.printf("* Version: %s\n", VERSION);
         Serial.print(F("* MasterIP: "));
         Serial.println(config.masterIP);
         Serial.print(F("* Username: "));
@@ -223,7 +233,7 @@ void setup()
     btn3.setTripleClickHandler(OnClearBadge);
     btn3.setLongClickDetectedHandler(OnLongPress);
     btn3.setLongClickTime(1000);
-    
+
     config.wakeup = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
     if (!config.wakeup) {
         myEvents.free(0);

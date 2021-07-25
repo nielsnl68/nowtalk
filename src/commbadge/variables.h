@@ -11,6 +11,9 @@
 #include <ArduinoJson.h>
 #include "TimeEvents.h"
 #include "Version.h"
+extern "C" {
+#include "crypto/base64.h"
+}
 
 #ifndef VERSION
 #define VERSION "0.0.0"
@@ -66,11 +69,11 @@ struct config_t
     boolean wakeup = false;
     unsigned long lastTime = 0;
     unsigned long timerPing = 30000; // send readings timer
-    unsigned long timerSleep  = 90000;
+    unsigned long timerSleep = 90000;
     bool registrationMode = false;
     char masterIP[40] = "<None>";
     char userName[64] = "<None>";
-    uint8_t masterSwitchboard[6] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    uint8_t masterSwitchboard[6] = { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
     byte channel = 0;
     char switchboard[32] = "";
     boolean TFTActive = false;
@@ -195,7 +198,7 @@ void loadConfiguration(bool clear = false)
     // Don't forget to change the capacity to match your requirements.
     // Use arduinojson.org/v6/assistant to compute the capacity.
     StaticJsonDocument<524> doc;
-    
+
     // memset(*config, 0, sizeof(config));
     // Open file for reading
     if (SPIFFS.exists(configFile)) {
@@ -203,18 +206,32 @@ void loadConfiguration(bool clear = false)
         deserializeJson(doc, file);
         file.close();
     }
-   // serializeJsonPretty(doc, Serial);
+ //   serializeJsonPretty(doc, Serial);
     // Copy values from the JsonDocument to the Config
     config.channel = doc["channel"] | 0;
     //config.port = doc["port"] | 2731;
     strlcpy(config.switchboard, doc["switchboard"] | "", sizeof(config.switchboard)); // <- destination's capacity
+    const char* mac = doc["switchboardMac64"].as<const char*>();
+ //   Serial.print("\n{");
+   // Serial.print(mac);
+  //  Serial.print("}");
+   // Serial.println(mac == nullptr);
+    if (mac != nullptr) {
+        size_t outputLength;
 
+        unsigned char* decode = base64_decode((const unsigned char*)mac, strlen(mac), &outputLength);
+        memcpy(config.masterSwitchboard, decode, 6); // <- destination's capacity
+        if (currentSwitchboard[0] == 0) {
+            memcpy(currentSwitchboard, decode, 6); // <- destination's capacity
+        }
+        free(decode);
+    }
     config.timerPing = doc["timerPing"] | 30000;      // send readings timer
-    config.timerSleep = doc["timerSleep"] |  90000; //EVENT_INTERVAL_MS
+    config.timerSleep = doc["timerSleep"] | 90000; //EVENT_INTERVAL_MS
     config.ledBacklight = doc["ledBacklight"] | 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
     config.sprVolume = doc["sprVolume"] | 40;
     config.heartbeat = doc["heartbeat"] | 0;
-    
+
 
     strlcpy(config.masterIP, doc["masterIP"] | "<None>", sizeof(config.masterIP)); // <- destination's capacity
     strlcpy(config.userName, doc["userName"] | "<None>", sizeof(config.userName)); // <- destination's capacity
@@ -222,15 +239,15 @@ void loadConfiguration(bool clear = false)
     {
         config.registrationMode = true;
     }
-    
+
     for (JsonObject elem : doc["alarms"].as<JsonArray>()) {
         int id = elem["id"];
         uint64_t nt = elem["nextTrigger"].as<uint64_t>();
         alarms[id].value = elem["time"];
         alarms[id].nextTrigger = nt;
         alarms[id].Mode.alarmType = elem["mode_alarmType"];
-        alarms[id].Mode.isEnabled = elem["mode_isEnabled"]; 
-        alarms[id].Mode.isOneShot = elem["mode_isOneShot"]; 
+        alarms[id].Mode.isEnabled = elem["mode_isEnabled"];
+        alarms[id].Mode.isOneShot = elem["mode_isOneShot"];
         alarms[id].onTickHandler = (OnTick_t)elem["trigger"].as<uint32_t>();
         Serial.printf("timeleft %lld\n", myEvents.timeNow() - nt);
         myEvents.updateNextTrigger(id);
@@ -249,8 +266,8 @@ void saveConfiguration()
     // Delete existing file, otherwise the configuration is appended to the file
     SPIFFS.remove(configFile);
 
-     fs::File file = SPIFFS.open(configFile, FILE_WRITE);
-    if (!file)    {
+    fs::File file = SPIFFS.open(configFile, FILE_WRITE);
+    if (!file) {
         Serial.println(F("E Failed to create file"));
         return;
     }
@@ -264,29 +281,34 @@ void saveConfiguration()
     doc["channel"] = config.channel;
     //doc["port"] = config.port;
     doc["switchboard"] = config.switchboard;
+    size_t outputLength;
+    unsigned char* encode = base64_encode((const unsigned char*)config.masterSwitchboard, 6, &outputLength);
+    doc["switchboardMac64"] = encode;
+    free(encode);
+
 
     doc["timerPing"] = config.timerPing;       // send readings timer
     doc["timerSleep"] = config.timerSleep; //EVENT_INTERVAL_MS
 
     doc["masterIP"] = config.masterIP;
     doc["userName"] = config.userName;
-    doc["ledBacklight"] = config.ledBacklight ; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
+    doc["ledBacklight"] = config.ledBacklight; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
     doc["sprVolume"] = config.sprVolume;
 
     JsonArray data = doc.createNestedArray("alarms");
     for (uint8_t id = 0; id < dtNBR_ALARMS; id++) {
         if (alarms[id].Mode.alarmType != dtNotAllocated) {
             JsonObject data_0 = data.createNestedObject();
-            data_0["id"]         = id;
-            data_0["time"]     = alarms[id].value;
+            data_0["id"] = id;
+            data_0["time"] = alarms[id].value;
             data_0["nextTrigger"] = alarms[id].nextTrigger;
             data_0["mode_alarmType"] = alarms[id].Mode.alarmType;
             data_0["mode_isEnabled"] = alarms[id].Mode.isEnabled;
             data_0["mode_isOneShot"] = alarms[id].Mode.isOneShot;
-            data_0["trigger"] = (uint32_t) alarms[id].onTickHandler;
+            data_0["trigger"] = (uint32_t)alarms[id].onTickHandler;
         }
     }
-    
+   // serializeJsonPretty(doc, Serial);
     if (serializeJson(doc, file) == 0)
     {
         Serial.println(F("Failed to write to file"));

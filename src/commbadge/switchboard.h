@@ -29,7 +29,7 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info,
 {
     String test;
     String split = String(info);
-    char msg[255];
+   // char msg[255];
 
     debug('>', mac, action, info);
 
@@ -45,12 +45,13 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info,
         // turn off timeout
         bool isNewMaster = (currentSwitchboard[0] == 0);
         if (isNewMaster)
-        {  
-            if (!config.wakeup) {
-                sprintf(msg, "Switchboard at:\n%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-                ShowMessage(msg, '*');
-            }
+        {
             memcpy(currentSwitchboard, mac, 6);
+            if (config.masterSwitchboard[0] == 0)
+            {
+                memcpy(config.masterSwitchboard, mac, 6);
+                saveConfiguration();
+            }
             add_peer(mac);
 
         }
@@ -59,6 +60,9 @@ void handlePackage(const uint8_t mac[6], const uint8_t action, const char* info,
             strlcpy(config.switchboard, name.c_str(), sizeof(config.switchboard)); // <- destination's capacity
 
             String date = getValue(split, '~', 1);
+            if (!config.wakeup) {
+                ShowMessage('*', "New switchboard:\n\n%s", config.switchboard);
+            }
         }
         /*
         configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);

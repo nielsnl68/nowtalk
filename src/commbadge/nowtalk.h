@@ -22,7 +22,7 @@ void add_peer(const uint8_t* mac) {
 
 void serial_mac(const uint8_t* mac_addr) {
     char macStr[18];
-    snprintf(macStr, sizeof(macStr),("%02x%02x%02x%02x%02x%02x "),
+    snprintf(macStr, sizeof(macStr),"%02x%02x%02x%02x%02x%02x",
         mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
     Serial.print(macStr);
 }
@@ -36,48 +36,24 @@ byte nibble(char c)
     return 0;  // Not a valid hexadecimal character
 }
 
-void hexCharacterStringToBytes(byte* byteArray, const char* hexString)
+void hexStringToBytes(const char* hexString, byte* byteArray )
 {
-    bool oddLength = strlen(hexString) & 1;
+     bool Nibble = strlen(hexString) & 1;
 
-    byte currentByte = 0;
     byte byteIndex = 0;
 
     for (byte charIndex = 0; charIndex < strlen(hexString); charIndex++)
     {
-        bool oddCharIndex = charIndex & 1;
+        Nibble = !Nibble;
 
-        if (oddLength)
-        {
-            // If the length is odd
-            if (oddCharIndex)
-            {
-                // odd characters go in high nibble
-                currentByte = nibble(hexString[charIndex]) << 4;
-            }
-            else
-            {
-                // Even characters go into low nibble
-                currentByte |= nibble(hexString[charIndex]);
-                byteArray[byteIndex++] = currentByte;
-                currentByte = 0;
-            }
-        }
-        else
-        {
-            // If the length is even
-            if (!oddCharIndex)
-            {
-                // Odd characters go into the high nibble
-                currentByte = nibble(hexString[charIndex]) << 4;
-            }
-            else
-            {
-                // Odd characters go into low nibble
-                currentByte |= nibble(hexString[charIndex]);
-                byteArray[byteIndex++] = currentByte;
-                currentByte = 0;
-            }
+        // If the length is odd
+        if (Nibble) {
+            // odd characters go in high nibble
+            byteArray[byteIndex] = nibble(hexString[charIndex]) << 4;
+        } else {
+            // Even characters go into low nibble
+            byteArray[byteIndex] |= nibble(hexString[charIndex]);
+            byteIndex++;
         }
     }
 }
@@ -101,7 +77,7 @@ esp_err_t  send_message(const uint8_t* mac, byte action, String data) {
     char  myData[200];
     byte n = sprintf(myData, "%c%s", (char)action, data.c_str());
     myData[n] = 0;
-    debug('<', mac, action, data.c_str());
+  //  debug('<', mac, action, data.c_str());
     esp_err_t  result = esp_now_send(mac, (const uint8_t*)&myData, n);
     return result;
 }
