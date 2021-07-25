@@ -9,3 +9,4 @@ bin/commBadge.bin
 bin/nowTalkBadge.bin
 bin/nowTalkBridge.bin
 .version_no_increment
+nodejs/switchboard/nowTalk.sqlite
