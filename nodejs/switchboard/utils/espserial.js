@@ -1,11 +1,12 @@
 'use strict';
-const SerialPort = require('serialport');
+//const SerialPort = require('serialport');
 
 let espPort;
 let espReader;
 let espOutputFunc;
 let espChipType;
 let espMacAddr;
+let espUploadBaudrate;
 
 // Command
 const ESP_FLASH_BEGIN = 0x02;
@@ -39,6 +40,13 @@ async function espSelectPort() {
         espDisconnect();
     }
     espPort = await navigator.serial.requestPort();
+
+    await espPort.open({ baudRate: 115200 });
+    espOutput("Serial Open\n");
+    const { usbProductId, usbVendorId } = espPort.getInfo();
+    espOutput("Connect VendorId=0x" + usbVendorId.toString(16) + " ProductId=0x" + usbProductId.toString(16) + "\n");
+
+    return espPort;
 }
 
 function espSetOutput(func) {
@@ -780,7 +788,7 @@ async function espFlashEnd(entrypoint = 0) {
     }
 };
 
-
+/*
 module.exports = {
     espConnect,
     espDisconnect,
@@ -791,3 +799,4 @@ module.exports = {
     espFlash,
     espChangeBaudrate,
 };
+*/

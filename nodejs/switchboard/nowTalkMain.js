@@ -1,3 +1,4 @@
+
 /*jshint esversion: 10 */
 "use strict";
 
@@ -40,7 +41,6 @@ class NowTalkMain extends events.EventEmitter {
         if (config.dynamicExtIP === "true") {
             this.dynamicIpTimer = setInterval(this.onRequestExternalIP, 1000 * 60 * 15);
         }
-
 
         this.onPortOpened = this.onPortOpened.bind(this);
         this.onPortClosed = this.onPortClosed.bind(this);
@@ -101,7 +101,6 @@ class NowTalkMain extends events.EventEmitter {
         switch (version) {
             case 1:
                 version++;
-
         }
         return db;
     }
@@ -148,9 +147,9 @@ class NowTalkMain extends events.EventEmitter {
                 user = new nowTalkUser(row, main);
                 isNew = false;
             }
-
             db.close();
         }
+
         if (isNew && (info === false || this.config.allowGuests)) {
             if (info === false) info = {};
             user = new nowTalkUser({
@@ -230,9 +229,9 @@ class NowTalkMain extends events.EventEmitter {
 
         if (typeof data === "undefined") data = "";
         if (ignoreCodes.indexOf(code) === -1) {
-          var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
-          let _msg = [_mac, 1 + data.length, 'h' + ("00" + code.toString(16)).substr(-2), data.toString()];
-          this.web.addMessage('send', JSON.stringify(_msg));
+            var _mac = "h" + ("000000000000000" + mac.toString(16)).substr(-12);
+            let _msg = [_mac, 1 + data.length, 'h' + ("00" + code.toString(16)).substr(-2), data.toString()];
+            this.web.addMessage('send', JSON.stringify(_msg));
         }
 
         var buf = Buffer.alloc(9);
@@ -245,7 +244,6 @@ class NowTalkMain extends events.EventEmitter {
             this.serialPort.write(data);
         }
     }
-
 
     unPeer(mac) {
         var buf = Buffer.alloc(9);
@@ -270,7 +268,7 @@ class NowTalkMain extends events.EventEmitter {
                     if (user.status === 0x01) {
                         user.setStatus(0x03);
                     }
-           //         this.web.onUpdateBadges(user);
+                    //         this.web.onUpdateBadges(user);
                     this.web.addMessage('success', "Badge's disable status is now changed.");
                     return;
                 case "friend":
@@ -278,7 +276,7 @@ class NowTalkMain extends events.EventEmitter {
                     if (user.status === 0x01) {
                         user.setStatus(0x03);
                     }
-        //            this.web.updateSingleBadge(user);
+                    //            this.web.updateSingleBadge(user);
                     this.web.addMessage('success', "Badge's friend status is now changed.");
                     return;
                 case "name":
@@ -298,7 +296,7 @@ class NowTalkMain extends events.EventEmitter {
                     }
                     return;
                 default:
-                    // do notting
+                // do notting
             }
         } else {
             this.web.onUpdateBadges();
@@ -317,15 +315,8 @@ class NowTalkMain extends events.EventEmitter {
             });
     }
 
-    onUpdateBadeList() {
-        let needUpdate = false;
-        this.users.keys().forEach((key) => {
-            // do something 
-        });
-    }
-
     onPortOpened() {
-        const msg = "***\0";
+        const msg = "***\n\0";
         const main = this;
         var timer = null;
 
@@ -362,6 +353,7 @@ class NowTalkMain extends events.EventEmitter {
         }, 1500);
 
         this.parser.off("data", this.onParserData);
+
         this.parser.on("data", response);
         this.serialPort.write(msg);
     }
@@ -382,6 +374,7 @@ class NowTalkMain extends events.EventEmitter {
             setTimeout(this._reconnect, 5000);
         }
     }
+
     onParserData(data) {
         if (data.readUInt8(0) === 0x02) {
             let msg = {};
@@ -416,7 +409,7 @@ class NowTalkMain extends events.EventEmitter {
             let mac = data.readUIntBE(1, 6).toString(16);
             console.info("Peer " + mac + " is released");
         } else {
-             if (!this.emit("handle_" + data.toString('utf8', 0, 1).toUpperCase(), data)) {
+            if (!this.emit("handle_" + data.toString('utf8', 0, 1).toUpperCase(), data)) {
                 console.error("Srv.handle_" + data.toString('utf8', 0, 1), data);
             }
         }
@@ -499,7 +492,7 @@ class NowTalkMain extends events.EventEmitter {
 
         if (!this.newBadgeInUse) {
             this.newBadgeInUse = true;
-            
+
             let user = this.getBadge(msg.mac);
             console.info(user);
             if ((typeof user !== "undefined") && user.isStatus(0x10) && user.badgeID) {

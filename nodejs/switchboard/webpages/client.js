@@ -3,13 +3,21 @@
 $(document).ready(function () {
     'use strict';
 
-    //const newbadgeAdd = document.getElementById('newbadgeAdd');
+    const socket = io();
+    const serialObj = navigator.serial;
+    //const portObj;// = serialObj.requestPort();
+
     let table = $("#listBadges");
     let msgBody = $("#msgBody");
+    let config;
 
-    const socket = io();
+    let onFindSerialPorts;
+
     $("#newBadgeAlert").hide();
-    $("#editBadgeAlert").hide();
+
+
+
+
 
     // client-side
     socket.on("connect", () => {
@@ -17,22 +25,23 @@ $(document).ready(function () {
     });
 
     socket.on("disconnect", (reason) => {
-        callAddMessage("_disconnect", "Server has been disconnected. "+reason);
+        callAddMessage("_disconnect", "Server has been disconnected. " + reason);
     });
 
     socket.on("connect_error", (reason) => {
-//        callAddMessage("_error", "A connect_error. ");
-  //      console.error(reason);
+        //        callAddMessage("_error", "A connect_error. ");
+        //      console.error(reason);
     });
 
     // Get room and users
     socket.on('config', (obj) => {
         $("#sts_switchboardName").text(obj.switchboardName);
-        $("#sts_version").text(obj.version + "/" + (obj.bridge.version||"<None>"));
+        $("#sts_version").text(obj.version + "/" + (obj.bridge.version || "<None>"));
         $("#sts_externIP").text(obj.externelIP || "<None>");
         $("#sts_mac").text(obj.bridge.mac);
         $("#sts_channel").text(obj.bridge.channel);
         $("#sts_bridgeid").text(obj.bridge.bridgeID);
+        config = obj;
     });
 
     socket.on('newBadge', (obj) => {
@@ -48,6 +57,7 @@ $(document).ready(function () {
         $("#newBadgeConfirm").show();
         $("#newBadgeForm").hide();
         $("#newBadgeAlert").show();
+
         $("#newbadgeClose").on("click", function () {
             $("#newbadgeClose").off("click");
             $("newBadgeForm").off('submit');
@@ -58,6 +68,7 @@ $(document).ready(function () {
             $("#newBadgeAlert").hide();
             socket.emit('newBadge', false);
         });
+
         $("#newbadgeYes").on('click', function () {
             socket.emit('newBadge', true);
             $("#newBadgeConfirm").hide();
@@ -88,14 +99,11 @@ $(document).ready(function () {
     socket.on('msgs', (list) => {
         $("#msgbody").empty();
         list.forEach((item) => {
-            callAddMessage(item[0],item[1]);
+            callAddMessage(item[0], item[1]);
         });
     });
 
     socket.on('update', (list, time) => {
-      //  console.info(list);
-
-
         list.forEach((item) => {
             //       return { mac: useHexMac ? this._mac : this.mac, status: this.status, ip: this.ip, name: this.name, time: this.timestamp };
             let status_icon = 'handshake'; // item.status.toString(16);
@@ -135,7 +143,7 @@ $(document).ready(function () {
             if (table.has("#" + item.mac).length == 0) {
                 let newRow = "<tr id='" + item.mac + "' class='align-middle'>";
                 newRow += "<td class='text-center'>";
-                newRow += '<i data-action="status"  class="' + statusClass + '" title="' + status_hint+ '" data-bs-toggle="dropdown" aria-expanded="false" role="button" tabindex="0"></i>';
+                newRow += '<i data-action="status"  class="' + statusClass + '" title="' + status_hint + '" data-bs-toggle="dropdown" aria-expanded="false" role="button" tabindex="0"></i>';
                 newRow += "<ul class='dropdown-menu dropdown-menu-dark ' style='min-width:none'><li>";
 
                 newRow += '<div class="p-0 btn-group">';
@@ -144,7 +152,7 @@ $(document).ready(function () {
                 newRow += '<button class="dropdown-item text-danger nowtalk-toggle" data-action="disable" title="Block badge"><i class="fas fa-times" ></i></button> ';
                 newRow += "</div></li></ul";
 
-                newRow +="</td > ";
+                newRow += "</td > ";
                 newRow += "<td class='text-truncate'>" + item.mac.substr(1) + "</td>";
                 newRow += "<td class='nowtalk-name text-truncate'></td>";
                 newRow += "<td class='nowtalk-ip text-truncate' ></td><td class=''>";
@@ -152,28 +160,28 @@ $(document).ready(function () {
                 newRow += '<div class="progress-bar" role="progressbar" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100" style="width: 50%"></div>';
                 newRow += "</div></td></tr >";
                 table.append(newRow);
-            } 
+            }
             let row = $("#" + item.mac);
-            row.attr('data-status', "H"+("0"+item.status.toString(16)).substr(-2));
+            row.attr('data-status', "H" + ("0" + item.status.toString(16)).substr(-2));
 
             row.attr('data-progress', item.time);
             let statusDOM = row.find('[data-action="status"]');
-            let oldclass =statusDOM.attr('class');
-            if (statusDOM.hasClass('show')) { statusClass += " show";}
+            let oldclass = statusDOM.attr('class');
+            if (statusDOM.hasClass('show')) { statusClass += " show"; }
             if (oldclass !== statusClass) {
-          //      console.info([statusClass, oldclass]);
+                //      console.info([statusClass, oldclass]);
                 row.find('[data-action="status"]').attr('class', statusClass);
                 row.find('[data-action="status"]').attr('title', status_hint);
             }
             row.children(".nowtalk-name").text(item.name);
             row.children(".nowtalk-ip").text(item.ip);
             let x = item.time;
-            row.find(".progress-bar").attr("aria-valuenow", x).css("width", x+"%");
-            
+            row.find(".progress-bar").attr("aria-valuenow", x).css("width", x + "%");
+
             row.find('[data-action="friend"]').prop('disabled', (item.status & 0x10) !== 0).attr('data-status', (item.status & 0x20) !== 0);
             row.find("[data-action='name']").prop('disabled', (item.status & 0x30) === 0).attr('data-name', item.name);
             row.find('[data-action="disable"]').attr('data-status', (item.status & 0x80) !== 0);
-            row.attr('data-status', ("0"+item.status.toString(16)).substr(-2));
+            row.attr('data-status', ("0" + item.status.toString(16)).substr(-2));
             if (typeof time === "string") {
                 row.attr('data-time', time);
             }
@@ -196,7 +204,7 @@ $(document).ready(function () {
                 row.append("<div class='col-2'></div>");
                 _msg.addClass("text-end col-10 mt-1 px-1 text-primary rounded-start alert-secondary ");
                 break;
-            
+
             case '_connect':
                 _msg.addClass("col-12 px-1 mt-1 text-success border alert-success  ");
                 break;
@@ -241,10 +249,10 @@ $(document).ready(function () {
         }
     });
 
-    table.on ('click', ".nowtalk-toggle", (e) => {
+    table.on('click', ".nowtalk-toggle", (e) => {
         let button = $(this.activeElement);
         let row = button.closest('tr');
-        socket.emit('editBadge', row.prop('id'), button.data('action'),  button.data("status"));
+        socket.emit('editBadge', row.prop('id'), button.data('action'), button.data("status"));
     });
 
     table.on('click', '.nowtalk-edit', (e) => {
@@ -260,9 +268,84 @@ $(document).ready(function () {
 
     table.on('contextmenu', '.nowtalk-status', (e) => {
         e.preventDefault();
-   //     console.info('contextmenu clicked');
+        //     console.info('contextmenu clicked');
         $(this).trigger('click');
         return false;
     });
 
+    function showlog(log) {
+        callAddMessage("primary", log);
+    }
+
+    let espPort;
+
+    async function nowTalkSend(packet) {
+        if (typeof packet === "string") {
+            packet = new TextEncoder("utf-8").encode(packet);
+        }
+        const espWriter = espPort.writable.getWriter();
+        console.log("Send", packet);
+        await espWriter.write(packet);
+        espWriter.releaseLock();
+
+        // Wait
+ //       await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+
+    async function nowTalkTimeout(espReader) {
+
+        if (espReader) {
+            console.info("timeout", espReader);
+            showlog("timeout" );
+            espReader.cancel("cancel at Timeout");
+        }
+    }
+
+    async function nowTalkReceive(timeOut = 200) {
+        let espReader = espPort.readable.getReader();
+        let timer = setTimeout(nowTalkTimeout, timeOut, espReader);
+        let result = "";
+        console.warn(espReader);
+        showlog("start reading");
+        try {
+            while (true) {
+                const { value, done } = await espReader.read();
+                if (done) {
+                    showlog("done");
+                    break;
+                }
+                result += new TextDecoder().decode(value);
+            }
+        } finally {
+            clearTimeout(timer);
+            espReader.cancel("cancel at done");
+            await espReader.releaseLock();
+            espReader = null;
+        }
+        return result;
+    }
+
+
+    $("#btnConnect").on('click', writeBtn);
+    async function writeBtn() {
+        espSetOutput(showlog);
+        try {
+            espPort = await espSelectPort(115200);
+            await nowTalkReceive();
+            nowTalkSend("###info~" + config.bridge.mac + "\n");
+            let value = await nowTalkReceive();
+            showlog(value);
+            if (value) {
+                value = value.split("~");
+                showlog(value);
+            }
+
+        } catch (error) {
+            showlog(error);
+        } finally {
+            await espDisconnect(true);
+        }
+
+    };
 });

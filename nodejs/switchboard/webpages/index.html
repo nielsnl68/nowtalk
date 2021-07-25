@@ -26,10 +26,12 @@
 <body class="alert-primary " style="height:100vh">
     <nav class="navbar navbar-dark bg-primary py-1">
         <div class="container-fluid">
-            <span class="navbar-brand  mr-auto py-0  ">NowTalk - <span id="sts_switchboardName" class="text-info">Name
+            <span class="navbar-brand  me-auto py-0 ">NowTalk - <span id="sts_switchboardName" class="text-info">Name
                     unknown</span></span>
 
-
+                <button id="btnConnect" type="button" class="nav-item btn btn-primary btn-sm ">
+                    Connect
+                </button>
             <div class="nav-item btn-group">
 
                 <button id="btnStatusinfo" type="button" class="btn btn-primary btn-sm dropdown-toggle"
@@ -147,7 +149,7 @@
         </script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>
-
+    <script src="/espserial.js"></script>
 </body>
 
 </html>

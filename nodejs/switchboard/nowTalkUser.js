@@ -3,7 +3,7 @@
 "use strict";
 
 const events = require('events');
-const { hrtime} = require('process');
+const { hrtime } = require('process');
 const text2wav = require('text2wav');
 
 const NOWTALK_CLIENT_PING = 0x01;
@@ -35,13 +35,12 @@ const NOWTALK_CLIENT_STREAM = 0x3f;
 
 const NOWTALK_BRIDGE_RESEND = 0x77;
 
-
 const NOWTALK_CLIENT_HELPSOS = 0xff;
 
 const NOWTALK_STATUS_GONE = 0x00;
 const NOWTALK_STATUS_ALIVE = 0x01;
 const NOWTALK_STATUS_GUEST = 0x02;
-const NOWTALK_STATUS_BUSY   = 0x04;
+const NOWTALK_STATUS_BUSY = 0x04;
 const NOWTALK_STATUS_EXTERN = 0x08;
 
 const NOWTALK_BADGE_MEMBER   = 0x10;
@@ -55,7 +54,7 @@ class NowTalkUser extends events.EventEmitter {
         super();
         this.main = main;
         this.fillInfo(userInfo);
-        this.timestamp = this.isStatus(0x10)? 0n : hrtime.bigint();
+        this.timestamp = this.isStatus(0x10) ? 0n : hrtime.bigint();
         this.externelIP = "";
         this.realName = "";
         this.lastMessage = null;
@@ -65,7 +64,7 @@ class NowTalkUser extends events.EventEmitter {
         this.isStarted = false;
         this.queue = [];
     }
-    
+
     fillInfo(userInfo) {
         this.mac = userInfo.mac;
         this._mac = "h" + ("000000000000000" + userInfo.mac.toString(16)).substr(-12);
@@ -81,18 +80,18 @@ class NowTalkUser extends events.EventEmitter {
             this.on("handle_h01", this.onPingPong);
             this.on("handle_h77", this.onResendRequest);
         }
-     }
-    
+    }
+
     stop() {
         this.eventNames().forEach(element => {
             this.removeAllListeners(element);
         });
     }
 
-    setStatus(status,add = null) {
+    setStatus(status, add = null) {
         var x = this.status;
         if (status > 0x0f) {
-             if (add === null) {
+            if (add === null) {
                 this.status = (this.status & 0x0f) | (status & 0xf0);
             } else if (add) {
                 this.status = (this.status) | (status & 0xf0);
@@ -109,7 +108,7 @@ class NowTalkUser extends events.EventEmitter {
                 this.status = this.status ^ (status & 0x0f);
             }
         }
- //       console.info('status', status > 0x0f, x.toString(16), this.status.toString(16), status.toString(16), remove);
+        //       console.info('status', status > 0x0f, x.toString(16), this.status.toString(16), status.toString(16), remove);
     }
 
     isStatus(status) {
@@ -119,12 +118,12 @@ class NowTalkUser extends events.EventEmitter {
     info(useHexMac = false) {
         let time = 0;
         let ip = this.ip;
-        
+
         if (useHexMac) {
             if ((ip == this.main.config.externelIP) && this.isStatus(0x10)) ip = '';
             if (this.isStatus(0x08)) ip = this.externelIP;
             time = parseInt(Number(hrtime.bigint() - this.timestamp) / (this.main.config.badgeTimeout * 10000000));
-            //   console.info(this.status.toString(16), time);
+            //     console.info(this.status.toString(16), time);
             if (time < 0) time = 0;
             if (time > 100) {
                 time = 100;
@@ -138,7 +137,6 @@ class NowTalkUser extends events.EventEmitter {
                     this.main.unPeer(this.mac);
                 }
             }
-
             time = 100 - time;
         }
         return { mac: useHexMac ? this._mac : this.mac, status: this.status, ip: ip, name: this.name, key: this.badgeID, time: time };
@@ -163,7 +161,7 @@ class NowTalkUser extends events.EventEmitter {
 
     sendMessage(code, msg) {
         this.lastMessage = { 'code': code, 'msg': msg, 'count': 0 };
-        this.main.sendMessage( this.mac, this.lastMessage.code, this.lastMessage.msg);
+        this.main.sendMessage(this.mac, this.lastMessage.code, this.lastMessage.msg);
     }
 
     webMessage(kind, msg) {
@@ -171,9 +169,9 @@ class NowTalkUser extends events.EventEmitter {
     }
 
     RegisterBadge(info, localIP) {
-        this.key    = info[0];
+        this.key = info[0];
         this.name = info[1];
-        this.ip       = localIP;
+        this.ip = localIP;
         this.setStatus(0x10);
     }
 
@@ -213,7 +211,7 @@ class NowTalkUser extends events.EventEmitter {
         this.setStatus(0x04, true);
         return true;
     }
- 
+
     onResendRequest(nsg) {
         if (this.lastMessage != null && this.lastMessage.count < 5) {
             this.main.sendMessage(this.mac, this.lastMessage.code, this.lastMessage.msg);
@@ -233,7 +231,7 @@ class NowTalkUser extends events.EventEmitter {
         this.off("handle_h30", this.onCallRequest);
         if (this.isStatus(0x80)) {  // user blocked
             this.webMessage('error', `Badge ${this.badgeID} is blocked and ignored.`, this);
-            this.main.unPeer( this.mac);
+            this.main.unPeer(this.mac);
             return true;
         } else if (this.status == 0x00) {
             this.webMessage('warning', "Unknown badge: " + msg._mac + ",  requesting  info.");
@@ -241,7 +239,7 @@ class NowTalkUser extends events.EventEmitter {
             this.sendMessage(0x03);
             return true;
         } else {
-            this.updateTimer();            
+            this.updateTimer();
             if ( !this.checkUpdates()) {
                 if (this.isStatus(0x01)) {
                     this.sendMessage(0x02);
@@ -249,7 +247,7 @@ class NowTalkUser extends events.EventEmitter {
                     this.sendMessage(0x02, this.main.config.switchboardName + "~" + (new Date()).toJSON());
                 }
                 this.off("handle_h30", this.onCallRequest);
-                this.setStatus(0x01, true); 
+                this.setStatus(0x01, true);
             }
             return true;
         }
@@ -277,9 +275,9 @@ class NowTalkUser extends events.EventEmitter {
         }
     }
 
-     onNackChange(msg) {
+    onNackChange(msg) {
         this.off("handle_h10", this.onAckChange);
-         this.off("handle_h11", this.onNackChange);
+        this.off("handle_h11", this.onNackChange);
     }
 
     onAckChange(msg) {
@@ -293,7 +291,7 @@ class NowTalkUser extends events.EventEmitter {
             this._newName = null;
         } else if (this._newUpdate !== null) {
             this._newUpdate = null;
-        }    
+        }
         this.updateBadge();
         if (!this.checkUpdates()) {
             this.sendMessage(0x02, this.main.config.switchboardName + "~" + (new Date()).toJSON());

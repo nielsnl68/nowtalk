@@ -27,7 +27,7 @@ const options = {
 
 
 
-const MAX_MSGS = 100;
+const MAX_MSGS = 100; 
 
 class NowTalkHttps {
     constructor(main) {
@@ -42,6 +42,7 @@ class NowTalkHttps {
         this.requestListener = this.requestListener.bind(this);
 
         this.server =  http2.createSecureServer(options, this.requestListener);
+            // http.createServer(this.requestListener);
         this.io = socketio(this.server);
 
         this.io.on('connection', socket => {
@@ -108,6 +109,12 @@ class NowTalkHttps {
             res.writeHead(200);
             return res.end(fsx.readFileSync("./webpages/client.js"));
         }
+        if (req.method === 'GET' && req.url === '/espserial.js') {
+            res.setHeader('Content-type', 'text/javascript');
+            res.writeHead(200);
+            return res.end(fsx.readFileSync("./utils/espserial.js"));
+        }
+
         switch (req.url) {
             case "":
             case "/":
