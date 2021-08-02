@@ -20,8 +20,8 @@
 */
 
 #include "AC101.h"
-#include <Wire.h>
-#include <Arduino.h>
+
+#define BCLK        // clock over BCLK comment out: clock over MCLK
 
 #define AC101_ADDR			0x1A				// Device address
 
@@ -137,37 +137,42 @@ const uint8_t regs[] = {
 
 bool AC101::WriteReg(uint8_t reg, uint16_t val)
 {
-	Wire.beginTransmission(AC101_ADDR);
-	Wire.write(reg);
-	Wire.write(uint8_t((val >> 8) & 0xff));
-	Wire.write(uint8_t(val & 0xff));
-	return 0 == Wire.endTransmission(true);
+	_TwoWireInstance->beginTransmission(AC101_ADDR);
+	_TwoWireInstance->write(reg);
+	_TwoWireInstance->write(uint8_t((val >> 8) & 0xff));
+	_TwoWireInstance->write(uint8_t(val & 0xff));
+	return 0 == _TwoWireInstance->endTransmission(true);
 }
 
 uint16_t AC101::ReadReg(uint8_t reg)
 {
-	Wire.beginTransmission(AC101_ADDR);
-	Wire.write(reg);
-	Wire.endTransmission(false);
+	_TwoWireInstance->beginTransmission(AC101_ADDR);
+	_TwoWireInstance->write(reg);
+	_TwoWireInstance->endTransmission(false);
 
 	uint16_t val = 0u;
-	if (2 == Wire.requestFrom(uint16_t(AC101_ADDR), uint8_t(2), true))
+	if (2 == _TwoWireInstance->requestFrom(uint16_t(AC101_ADDR), uint8_t(2), true))
 	{
-		val = uint16_t(Wire.read() << 8) + uint16_t(Wire.read());
+		val = uint16_t(_TwoWireInstance->read() << 8) + uint16_t(_TwoWireInstance->read());
 	}
-	Wire.endTransmission(false);
+	_TwoWireInstance->endTransmission(false);
 
 	return val;
 }
+//----------------------------------------------------------------------------------------------------------------------
 
-AC101::AC101()
-{
+AC101::AC101( TwoWire *TwoWireInstance ){
+    _TwoWireInstance = TwoWireInstance;
 }
 
-bool AC101::begin(int sda, int scl, uint32_t frequency)
-{
-	bool ok = Wire.begin(sda, scl, frequency);
-
+bool AC101::begin(int sda, int scl, uint32_t frequency) {
+    bool ok;
+    if((sda >= 0) && (scl >= 0)){
+	    ok = Wire.begin(sda, scl, frequency);
+    }
+    else {
+        ok = true;
+    }
 	// Reset all registers, readback default as sanity check
 	ok &= WriteReg(CHIP_AUDIO_RS, 0x123);
 	delay(100);
@@ -176,11 +181,26 @@ bool AC101::begin(int sda, int scl, uint32_t frequency)
 	ok &= WriteReg(SPKOUT_CTRL, 0xe880);
 
 	// Enable the PLL from 256*44.1KHz MCLK source
-	ok &= WriteReg(PLL_CTRL1, 0x014f);
-	ok &= WriteReg(PLL_CTRL2, 0x8600);
+	ok &= WriteReg(PLL_CTRL1, 0x0141);
+	uint16_t N = 48 << 4;            //   768       /* 512 / (M * (2*K+1)) / (CHANNELS * WORD_SIZE) -> 512 / 3 * (2 * 16) */
+	uint16_t PLL_EN = 1 << 15;       // 32768
+	uint16_t N_f = 0<<0;                    /* 0.2 N */
+	ok &= WriteReg(PLL_CTRL2, N | PLL_EN | N_f);
 
 	// Clocking system
-	ok &= WriteReg(SYSCLK_CTRL, 0x8b08);
+	uint16_t PLLCLK_ENA = 1<<15;            /* 0: Disable, 1: Enable */
+#ifdef BCLK
+	uint16_t PLL_CLK = 0x2 << 12;           /* bclk1 */
+	uint16_t I2S1CLK_SRC = 0x3<<8;          /* PLL */
+#else
+	uint16_t PLL_CLK = 0x0 << 12;           /* MCLK1 */
+	uint16_t I2S1CLK_SRC = 0x0<<8;          /* MLCK1 */
+#endif
+	uint16_t I2S1CLK_ENA = 1<<11;           /* 0: Disable, 1: Enable */
+
+	uint16_t SYSCLK_ENA = 1<<3;
+	ok &= WriteReg(SYSCLK_CTRL, PLLCLK_ENA | PLL_CLK | I2S1CLK_ENA|I2S1CLK_SRC|SYSCLK_ENA/*0x8b08*/);
+
 	ok &= WriteReg(MOD_CLK_ENA, 0x800c);
 	ok &= WriteReg(MOD_RST_CTRL, 0x800c);
 
@@ -197,25 +217,23 @@ bool AC101::begin(int sda, int scl, uint32_t frequency)
 	ok &= WriteReg(I2S1_MXR_SRC, 0x2200);
 
 	ok &= WriteReg(ADC_SRCBST_CTRL, 0xccc4);
-	ok &= WriteReg(ADC_SRC, 0x2020);
+	ok &= WriteReg(ADC_SRC, 0x1040);
 	ok &= WriteReg(ADC_DIG_CTRL, 0x8000);
 	ok &= WriteReg(ADC_APC_CTRL, 0xbbc3);
 
 	// Path Configuration
 	ok &= WriteReg(DAC_MXR_SRC, 0xcc00);
 	ok &= WriteReg(DAC_DIG_CTRL, 0x8000);
-	ok &= WriteReg(OMIXER_SR, 0x0081);
+	ok &= WriteReg(OMIXER_SR, 0x0102);
 	ok &= WriteReg(OMIXER_DACA_CTRL, 0xf080);
 
 	ok &= SetMode( MODE_DAC );
 
 	return ok;
 }
-
-void AC101::DumpRegisters()
-{
-	for (size_t i = 0; i < ARRAY_SIZE(regs); ++i)
-	{
+//----------------------------------------------------------------------------------------------------------------------
+void AC101::DumpRegisters(){
+	for (size_t i = 0; i < ARRAY_SIZE(regs); ++i){
 		Serial.print(regs[i], HEX);
 		Serial.print(" = ");
 		Serial.println(ReadReg(regs[i]), HEX);
@@ -228,8 +246,7 @@ uint8_t AC101::GetVolumeSpeaker()
 	return (ReadReg(SPKOUT_CTRL) & 31) * 2;
 }
 
-bool AC101::SetVolumeSpeaker(uint8_t volume)
-{
+bool AC101::SetVolumeSpeaker(uint8_t volume) {
 	// Divide by 2, as it is scaled to same range as headphone volume
 	volume /= 2;
 	if (volume > 31) volume = 31;
@@ -240,13 +257,11 @@ bool AC101::SetVolumeSpeaker(uint8_t volume)
 	return WriteReg(SPKOUT_CTRL, val);
 }
 
-uint8_t AC101::GetVolumeHeadphone()
-{
+uint8_t AC101::GetVolumeHeadphone() {
 	return (ReadReg(HPOUT_CTRL) >> 4) & 63;
 }
 
-bool AC101::SetVolumeHeadphone(uint8_t volume)
-{
+bool AC101::SetVolumeHeadphone(uint8_t volume) {
 	if (volume > 63) volume = 63;
 
 	uint16_t val = ReadReg(HPOUT_CTRL);
@@ -255,37 +270,32 @@ bool AC101::SetVolumeHeadphone(uint8_t volume)
 	return WriteReg(HPOUT_CTRL, val);
 }
 
-bool AC101::SetI2sSampleRate(I2sSampleRate_t rate)
-{
+bool AC101::SetI2sSampleRate(I2sSampleRate_t rate) {
 	return WriteReg(I2S_SR_CTRL, rate);
 }
 
-bool AC101::SetI2sMode(I2sMode_t mode)
-{
+bool AC101::SetI2sMode(I2sMode_t mode) {
 	uint16_t val = ReadReg(I2S1LCK_CTRL);
 	val &= ~0x8000;
 	val |= uint16_t(mode) << 15;
 	return WriteReg(I2S1LCK_CTRL, val);
 }
 
-bool AC101::SetI2sWordSize(I2sWordSize_t size)
-{
+bool AC101::SetI2sWordSize(I2sWordSize_t size) {
 	uint16_t val = ReadReg(I2S1LCK_CTRL);
 	val &= ~0x0030;
 	val |= uint16_t(size) << 4;
 	return WriteReg(I2S1LCK_CTRL, val);
 }
 
-bool AC101::SetI2sFormat(I2sFormat_t format)
-{
+bool AC101::SetI2sFormat(I2sFormat_t format) {
 	uint16_t val = ReadReg(I2S1LCK_CTRL);
 	val &= ~0x000C;
 	val |= uint16_t(format) << 2;
 	return WriteReg(I2S1LCK_CTRL, val);
 }
 
-bool AC101::SetI2sClock(I2sBitClockDiv_t bitClockDiv, bool bitClockInv, I2sLrClockDiv_t lrClockDiv, bool lrClockInv)
-{
+bool AC101::SetI2sClock(I2sBitClockDiv_t bitClockDiv, bool bitClockInv, I2sLrClockDiv_t lrClockDiv, bool lrClockInv) {
 	uint16_t val = ReadReg(I2S1LCK_CTRL);
 	val &= ~0x7FC0;
 	val |= uint16_t(bitClockInv ? 1 : 0) << 14;
@@ -294,25 +304,21 @@ bool AC101::SetI2sClock(I2sBitClockDiv_t bitClockDiv, bool bitClockInv, I2sLrClo
 	val |= uint16_t(lrClockDiv) << 6;
 	return WriteReg(I2S1LCK_CTRL, val);
 }
-
-bool AC101::SetMode(Mode_t mode)
-{
+//----------------------------------------------------------------------------------------------------------------------
+bool AC101::SetMode(Mode_t mode) {
 	bool ok = true;
-	if (MODE_LINE == mode)
-	{
+	if (MODE_LINE == mode) {
 		ok &= WriteReg(ADC_SRC, 0x0408);
 		ok &= WriteReg(ADC_DIG_CTRL, 0x8000);
-		ok &= WriteReg(ADC_APC_CTRL, 0x3bc0);
+    ok &= WriteReg(ADC_APC_CTRL, 0xbbc0);
 	}
 
-	if ((MODE_ADC == mode) or (MODE_ADC_DAC == mode) or (MODE_LINE == mode))
-	{
+	if ((MODE_ADC == mode) or (MODE_ADC_DAC == mode) or (MODE_LINE == mode)) {
 		ok &= WriteReg(MOD_CLK_ENA,  0x800c);
 		ok &= WriteReg(MOD_RST_CTRL, 0x800c);
 	}
 
-	if ((MODE_DAC == mode) or (MODE_ADC_DAC == mode) or (MODE_LINE == mode))
-	{
+	if ((MODE_DAC == mode) or (MODE_ADC_DAC == mode) or (MODE_LINE == mode)) {
 		// Enable Headphone output
 		ok &= WriteReg(OMIXER_DACA_CTRL, 0xff80);
 		ok &= WriteReg(HPOUT_CTRL, 0xc3c1);	

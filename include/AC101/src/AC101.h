@@ -22,7 +22,9 @@
 #ifndef AC101_H
 #define AC101_H
 
+#include <Arduino.h>
 #include <inttypes.h>
+#include <Wire.h>
 
 class AC101
 {
@@ -94,7 +96,7 @@ public:
 	} Mode_t;
 
 	// Constructor.
-  	AC101();
+  	AC101(TwoWire  *TwoWireInstance = &Wire);
 
 	// Initialize codec, using provided I2C pins and bus frequency.
 	// @return True on success, false on failure.
@@ -157,6 +159,8 @@ public:
 protected:
 	bool WriteReg(uint8_t reg, uint16_t val);
 	uint16_t ReadReg(uint8_t reg);
+private:
+	TwoWire *_TwoWireInstance = NULL;	// TwoWire Instance
 };
 
 #endif
