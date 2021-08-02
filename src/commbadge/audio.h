@@ -1,4 +1,8 @@
-#include "AC101.h"  
+
+#pragma once
+
+#include <Arduino.h>
+#include "AC101\src\AC101.h"  
 #define IIC_CLK                     32
 #define IIC_DATA                    33
 #include <driver/i2s.h>
@@ -8,29 +12,6 @@
 const i2s_port_t I2S_PORT = I2S_NUM_0;
 static AC101 ac;
 
-void audio_setup() {
-    Serial.begin(115200);
-    Serial.println("Configuring I2S...");
-    esp_err_t err;
-    Serial.printf("Connect to AC101 codec... ");
-    while (not ac.begin(IIC_DATA, IIC_CLK))
-    {
-        Serial.printf("Failed!\n");
-        delay(1000);
-    }
-    Serial.println("Setup I2S ...");
-    delay(1000);
-    i2s_install();
-    i2s_setpin();
-    i2s_start(I2S_PORT);
-}
-void loop() {
-    int32_t sample = 0;
-    int bytes = i2s_pop_sample(I2S_PORT, (char*)&sample, portMAX_DELAY);
-    if (bytes > 0) {
-        Serial.println(sample);
-    }
-}
 
 void i2s_install() {
     const i2s_config_t i2s_config = {
@@ -57,4 +38,28 @@ void i2s_setpin() {
     };
 
     i2s_set_pin(I2S_PORT, &pin_config);
+}
+
+void audio_setup() {
+    Serial.println("Configuring I2S...");
+    Serial.printf("Connect to AC101 codec... ");
+    while (not ac.begin(IIC_DATA, IIC_CLK))
+    {
+        Serial.printf("Failed!\n");
+        delay(1000);
+    }
+    Serial.println("Setup I2S ...");
+    delay(1000);
+    i2s_install();
+    i2s_setpin();
+    i2s_start(I2S_PORT);
+}
+
+void audio_loop() {
+    int32_t sample = 0;
+    size_t * bytes = 0;
+    i2s_read(I2S_PORT, (char*)&sample, sizeof(sample), bytes, portMAX_DELAY);
+    if (bytes > 0) {
+        Serial.println(sample);
+    }
 }

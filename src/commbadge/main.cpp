@@ -202,7 +202,8 @@ void setup()
         vref = adc_chars.vref;
     }
 
-
+    audio_setup();
+    
     if (!config.wakeup) {
         initTFT();
         Serial.printf("* Model: %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
