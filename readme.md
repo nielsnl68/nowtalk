@@ -1,6 +1,9 @@
 # nowTalk - An intercom system over ESP-NOW
 This would be my approach of building a commbadge system. using esp32 and some i2s modules. 
 
+**UPDATE 17-10-2022:** after a long cap of in activity i finally found a small enough device to be used as the **Com-Badge** using the M5Atom Echo.
+In the next periode i will revisit everything i have done in the past and include the code to finally allow to use voice commands   
+
 ## Insperation
 Inspire by @atomic14 i started to build my own version of your walkytalky concept. I always love to build a commbadge like in startrek/B5 etc. 
 I bought a couple of i2s devices like the VS1052, the stgl5000 and WM8960  to see which one the best performs.  I like the VS1052 because it has a couple of useful codec build into it. but we will see.
