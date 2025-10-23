@@ -1,172 +1,177 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
-#include <WiFiUdp.h>
-#include <ArduinoOTA.h>
-#include <espnow.h>
-  
-#ifndef STASSID
-#define STASSID "FusionNet"
-#define STAPSK  "Lum3nS0fT"
+#include <Arduino.h>
+
+#include <esp_now.h>
+#include <WiFi.h>
+#include <esp_wifi.h>
+//#include "Version.h"
+
+#ifndef VERSION
+#define VERSION "2.26.221"
 #endif
 
-#define VERSION 2.00
+uint8_t broadcastAddress[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+uint8_t channel = 0;
+bool isActive = false;
 
-const char* ssid = STASSID;
-const char* password = STAPSK;
-int channel = 0;
-uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+String badgeID() {
+  static char baseChars[] = "0123456789AbCdEfGhIjKlMnOpQrStUvWxYz";  //aBcDeFgHiJkLmNoPqRsTuVwXyZ
+  uint8_t base = sizeof(baseChars);
+  String result = "";
+  uint32_t chipId = 0xa5000000;
+  uint8_t crc = 0;
 
-void OnDataSent(uint8_t *mac, uint8_t sendStatus) {
-  if (sendStatus != 0){
-    Serial.write(0x02); Serial.write(mac,6); Serial.write(0x01);Serial.write(0x77);
+  for (int i = 0; i < 17; i = i + 8) {
+    chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
+  }
+
+  do {
+    result = String(baseChars[chipId % base]) + result;  // Add on the left
+    crc += chipId % base;
+    chipId /= base;
+  } while (chipId != 0);
+  return result + String(baseChars[crc % base]);
+}
+
+void OnDataSent(const uint8_t* mac, esp_now_send_status_t sendStatus) {
+  if (mac[0] == 0) {
+    Serial.println("E Data package was send with unknown Mac address.");
+  } else {
+    Serial.write(0x02);
+    Serial.write(mac, 6);
+    Serial.write(0x01);
+    Serial.write(0x77);
+    if (sendStatus != ESP_NOW_SEND_SUCCESS) {
+      Serial.write(0x77);
+    } else {
+      Serial.write(0x88);
+    }
   }
 }
 
-void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
-//  char data [200];
-  
-    Serial.write(0x02);
-    Serial.write(mac,6);
-    Serial.write(0x00);
-   // Serial.write(incomingData,1);
+void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *data, int data_len) {
+  if (!isActive) return;
+  bool broadcast = memcmp(info->des_addr, ESP_NOW.BROADCAST_ADDR, ESP_NOW_ETH_ALEN) == 0;
+
+  uint8_t * mac = recv_info->src_addr;
+  uint8_t * origin = recv_info->src_addr;
+  wifi_pkt_rx_ctrl_t *rx_ctrl = recv_info->rx_ctrl;
+  uint8_t rssi = rx_ctrl->rssi;
+
+
+  Serial.write(0x02);
+  Serial.write(mac, 6);
+  Serial.write(count+1);
+  Serial.write((broadcast?0x80:0x00) + rssi>>1);
+  Serial.write(buf, count);
+
 }
 
-
-void add_peer(uint8_t * mac) {
-  if (!esp_now_is_peer_exist(mac)){
-    esp_now_add_peer(mac, ESP_NOW_ROLE_COMBO, channel, NULL, 0);
-  } 
+void add_peer(const uint8_t* mac) {
+  // Register peer
+  if (!esp_now_is_peer_exist(mac)) {
+    esp_now_peer_info_t peerInfo = {};
+    memcpy(&peerInfo.peer_addr, mac, 6);
+    peerInfo.channel = channel;
+    // Add peer
+    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+      Serial.write(0x04);
+      Serial.write(mac, 6);
+      Serial.write(0x00);
+      return;
+    }
+  }
 }
 
 void setup() {
   Serial.begin(115200);
-  Serial.print(F("NowTalk Server Version:"));
-  Serial.println(VERSION,3);
-  Serial.println("Booting");
+  Serial.setDebugOutput(true);
+  Serial.print(F("* NowTalk Bridge Version:"));
+  Serial.println(VERSION);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    Serial.println("Connection Failed! Rebooting...");
-    delay(5000);
-    ESP.restart();
-  }
+  WiFi.disconnect();
 
-  // Port defaults to 8266
-  // ArduinoOTA.setPort(8266);
-
-  // Hostname defaults to esp8266-[ChipID]
-  ArduinoOTA.setHostname("nowTalkServer");
-
-  // No authentication by default
-  // ArduinoOTA.setPassword("admin");
-
-  // Password can be set with it's md5 value as well
-  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
-
-  ArduinoOTA.onStart([]() {
-    String type;
-    if (ArduinoOTA.getCommand() == U_FLASH) {
-      type = "sketch";
-    } else { // U_FS
-      type = "filesystem";
-    }
-
-    // NOTE: if updating FS this would be the place to unmount FS using FS.end()
-    Serial.println("Start updating " + type);
-  });
-  ArduinoOTA.onEnd([]() {
-    Serial.println("End");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %3u%%\n", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) {
-      Serial.println("Auth Failed");
-    } else if (error == OTA_BEGIN_ERROR) {
-      Serial.println("Begin Failed");
-    } else if (error == OTA_CONNECT_ERROR) {
-      Serial.println("Connect Failed");
-    } else if (error == OTA_RECEIVE_ERROR) {
-      Serial.println("Receive Failed");
-    } else if (error == OTA_END_ERROR) {
-      Serial.println("End Failed");
-    }
-  });
-  ArduinoOTA.begin();
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-
-  Serial.print("MAC Address:  ");
+  Serial.print(F("* MAC Address: "));
   Serial.println(WiFi.macAddress());
-  Serial.print(F("WiFi Channel: "));
+  Serial.print(F("* WiFi Channel: "));
   channel = WiFi.channel();
-  Serial.println( channel);
- 
+  Serial.println(channel);
+
   // Init ESP-NOW
   if (esp_now_init() != 0) {
-    Serial.println("Error initializing ESP-NOW");
+    Serial.println(F("* Error initializing ESP-NOW"));
     return;
   }
-  esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
-  esp_now_add_peer(broadcastAddress, ESP_NOW_ROLE_COMBO, 0, NULL, 0);
-  
+  add_peer(broadcastAddress);
+
   esp_now_register_send_cb(OnDataSent);
   esp_now_register_recv_cb(OnDataRecv);
-  Serial.println("Running");
- 
-}
-unsigned long previousMillis = millis();
-void loop() {
-  ArduinoOTA.handle();
-  if(millis() - previousMillis > 100000){
-      byte mac[6] = {0x21,0x31,0x41,0x51,0x11,0x61};
-      Serial.write(0x02); Serial.write(mac,6); Serial.write(0x01);Serial.write(0x77);
-      previousMillis =millis();
-  }
+  Serial.println(F("* Running"));
 }
 
-  unsigned long interval = 1000;
+unsigned long interval = 1000;
+void performUpdate(Stream& updateSource, size_t updateSize);
 
 void serialEvent() {
   unsigned long previousMillis = millis();
   while (Serial.available()) {
     // get the new byte:
     byte inChar = Serial.read();
-    if (inChar == 0x02) {
+    if (inChar == '*') {
+      String x = Serial.readStringUntil((char)0x10);
+      Serial.write('#');
+      Serial.write(x.c_str());
+      Serial.write('~');
+      Serial.print(VERSION);
+      Serial.write('~');
+      Serial.print(WiFi.macAddress());
+      Serial.write('~');
+      Serial.print(WiFi.channel());
+      Serial.write('~');
+      Serial.print(badgeID());
+    } else if (inChar == 0x02) {
       byte mac[6];
       byte len;
       previousMillis = millis();
-      while (Serial.available()<7) {
-        if(millis() - previousMillis > interval){
+      while (Serial.available() < 7) {
+        if (millis() - previousMillis > interval) {
           return;
         }
       }
-      Serial.readBytes(mac,6);
+      Serial.readBytes(mac, 6);
       len = Serial.read();
-      byte data [200];
+      byte data[300];
       previousMillis = millis();
-      while (Serial.available()<len) {
-        if(millis() - previousMillis > interval){
+      while (Serial.available() < len) {
+        if (millis() - previousMillis > interval) {
           return;
         }
       }
-      Serial.readBytes(data,len);
+      Serial.readBytes(data, len);
       add_peer(mac);
       esp_now_send(mac, data, len);
-      add_peer(mac);
-    }else if (inChar == 0x03) {
+    } else if (inChar == 0x03) {
       byte mac[6];
       previousMillis = millis();
-      while (Serial.available()<6) {
-        if(millis() - previousMillis > interval){
+      while (Serial.available() < 6) {
+        if (millis() - previousMillis > interval) {
           return;
         }
       }
-      Serial.readBytes(mac,6);
+      Serial.readBytes(mac, 6);
       esp_now_del_peer(mac);
+    } else if (inChar == 0x05) {
+      esp_reset();
     }
   }
+}
+
+
+void rebootEspWithReason(String reason) {
+  Serial.println(reason);
+  delay(1000);
+  ESP.restart();
+}
+
+void loop() {
+  serialEvent();
 }
