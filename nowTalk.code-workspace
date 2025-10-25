@@ -6,6 +6,23 @@
 		}
 	],
     "settings": {
-        "git.ignoreLimitWarning": true
+		"git.ignoreLimitWarning": true,
+		"files.associations": {
+			"*.embeddedhtml": "html",
+			"*.php": "php",
+			"charconv": "cpp",
+			"chrono": "cpp",
+			"optional": "cpp",
+			"format": "cpp",
+			"ratio": "cpp",
+			"system_error": "cpp",
+			"array": "cpp",
+			"functional": "cpp",
+			"tuple": "cpp",
+			"type_traits": "cpp",
+			"utility": "cpp",
+			"text_encoding": "cpp",
+			"thread": "cpp"
+		}
     }
 }
